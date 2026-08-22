@@ -2,6 +2,8 @@ import {
   buildProblemPath,
   mergeStats,
   parseCustomCommitMessage,
+  computeStatsFromReadmes,
+  syncStatsFromRepo,
 } from '../scripts/leetcode/util.js';
 
 describe('buildProblemPath', () => {
@@ -294,5 +296,116 @@ describe('mergeStats', () => {
       hard: 0,
       solved: 3,
     });
+  });
+});
+
+describe('syncStatsFromRepo', () => {
+  let originalFetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    global.chrome = {
+      runtime: {},
+      storage: {
+        local: {
+          get: (keys, cb) => {
+            const data = {
+              leethub_hook: 'owner/repo',
+              leethub_token: 'fake-token',
+              stats: { shas: {} },
+            };
+            if (cb) cb(data);
+            return Promise.resolve(data);
+          },
+          set: (obj, cb) => {
+            if (cb) cb();
+            return Promise.resolve();
+          },
+        },
+      },
+    };
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('reads stats.json from repository and calculates solved total', async () => {
+    global.fetch = async url => {
+      if (url.includes('stats.json')) {
+        return {
+          ok: true,
+          json: async () => ({
+            content: btoa(JSON.stringify({ easy: '5', medium: '10', hard: '2' })),
+          }),
+        };
+      }
+      return { ok: false };
+    };
+
+    const stats = await syncStatsFromRepo();
+    expect(stats.easy).toBe(5);
+    expect(stats.medium).toBe(10);
+    expect(stats.hard).toBe(2);
+    expect(stats.solved).toBe(17);
+  });
+});
+
+describe('computeStatsFromReadmes', () => {
+  let originalFetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('parses tree and counts problem difficulties', async () => {
+    global.fetch = async url => {
+      if (url.includes('/git/trees/HEAD')) {
+        return {
+          ok: true,
+          json: async () => ({
+            tree: [
+              { type: 'blob', path: 'LeetCode/Easy/0001-two-sum/README.md' },
+              { type: 'blob', path: 'LeetCode/Medium/0002-add-two-numbers/README.md' },
+              { type: 'blob', path: 'README.md' },
+            ],
+          }),
+        };
+      }
+      if (url.includes('0001-two-sum')) {
+        return {
+          ok: true,
+          json: async () => ({
+            content: btoa('<h3>Easy</h3>'),
+          }),
+        };
+      }
+      if (url.includes('0002-add-two-numbers')) {
+        return {
+          ok: true,
+          json: async () => ({
+            content: btoa('<h3>Medium</h3>'),
+          }),
+        };
+      }
+      return { ok: false };
+    };
+
+    const counts = await computeStatsFromReadmes('owner/repo', 'fake-token');
+    expect(counts.easy).toBe(1);
+    expect(counts.medium).toBe(1);
+    expect(counts.hard).toBe(0);
+  });
+
+  it('returns all zeros when git tree response is not ok (empty repo)', async () => {
+    global.fetch = async () => ({ ok: false });
+    const counts = await computeStatsFromReadmes('owner/repo', 'fake-token');
+    expect(counts.easy).toBe(0);
+    expect(counts.medium).toBe(0);
+    expect(counts.hard).toBe(0);
   });
 });
