@@ -290,29 +290,82 @@ const fetchRepoContent = async (hook, token, path) => {
 async function computeStatsFromReadmes(hook, token) {
   const counts = { easy: 0, medium: 0, hard: 0 };
 
-  const walk = async contents => {
-    for (const item of contents) {
-      try {
-        if (item.name.toLowerCase() === 'readme.md' && item.path !== 'README.md') {
-          const content = await fetchRepoContent(hook, token, item.path);
-          const difficulty = content.split('<h3>')[1]?.split('</h3>')[0]?.trim().toLowerCase();
-          if (difficulty === 'easy' || difficulty === 'medium' || difficulty === 'hard') {
-            counts[difficulty] += 1;
-          }
-        } else if (item.type === 'dir') {
-          await walk(await fetchRepoContent(hook, token, item.path));
-        }
-      } catch (err) {
-        console.error(`LeetHub: failed to process ${item.path}`, err);
-      }
-    }
-  };
+  try {
+    const res = await fetch(`https://api.github.com/repos/${hook}/git/trees/HEAD?recursive=1`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+    });
 
-  await walk(await fetchRepoContent(hook, token, ''));
+    if (!res.ok) return counts;
+
+    const data = await res.json();
+    const tree = data?.tree ?? [];
+
+    const readmeItems = tree.filter(
+      item =>
+        item.type === 'blob' &&
+        item.path.toLowerCase().endsWith('readme.md') &&
+        item.path.toLowerCase() !== 'readme.md'
+    );
+
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < readmeItems.length; i += BATCH_SIZE) {
+      const batch = readmeItems.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map(async item => {
+          try {
+            const content = await fetchRepoContent(hook, token, item.path);
+            const match = content.match(/<h3[^>]*>\s*(Easy|Medium|Hard)\s*<\/h3>/i);
+            if (match) {
+              const diff = match[1].toLowerCase();
+              if (diff === 'easy' || diff === 'medium' || diff === 'hard') {
+                counts[diff] += 1;
+              }
+            }
+          } catch (err) {
+            console.error(`LeetHub: failed to parse ${item.path}`, err);
+          }
+        })
+      );
+    }
+  } catch (err) {
+    console.error('LeetHub: failed to compute stats from git trees', err);
+  }
+
   return counts;
 }
 
+function encodeJsonContent(value) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(value, null, 2))));
+}
+
+async function putRepoFile(hook, token, filename, content, message, sha) {
+  const bodyData = { message, content };
+  if (sha) bodyData.sha = sha;
+
+  const res = await fetch(`https://api.github.com/repos/${hook}/contents/${filename}`, {
+    method: 'PUT',
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+    body: JSON.stringify(bodyData),
+  });
+
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const body = await res.json();
+      detail = body?.message ? `: ${body.message}` : '';
+    } catch (_err) {
+      detail = '';
+    }
+    throw new Error(`GitHub write failed for ${filename}: HTTP ${res.status}${detail}`);
+  }
+
+  return res.json();
+}
+
 const STATS_FILENAME = 'stats.json';
+const README_FILENAME = 'README.md';
+const DEFAULT_REPO_README =
+  'A collection of LeetCode questions to ace the coding interview! - Created using [LeetHub](https://github.com/vpk-11/LeetHub-2.0)';
 
 /** Reads stats.json from the linked repo. File shape is exactly
  * `{ "easy": "0", "medium": "0", "hard": "0" }` - string values, no "solved" key (that's
@@ -345,22 +398,27 @@ async function getRepoStats(hook, token) {
  * Writes exactly `{ easy, medium, hard }` as strings - nothing else. */
 async function putRepoStats(hook, token, counts, sha) {
   try {
+    let currentSha = sha;
+    if (!currentSha) {
+      const existing = await getRepoStats(hook, token);
+      currentSha = existing?.sha;
+    }
     const content = {
       easy: String(counts.easy),
       medium: String(counts.medium),
       hard: String(counts.hard),
     };
-    await fetch(`https://api.github.com/repos/${hook}/contents/${STATS_FILENAME}`, {
-      method: 'PUT',
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
-      body: JSON.stringify({
-        message: sha ? 'Update LeetHub stats' : 'Create LeetHub stats',
-        content: btoa(unescape(encodeURIComponent(JSON.stringify(content, null, 2)))),
-        sha,
-      }),
-    });
+    await putRepoFile(
+      hook,
+      token,
+      STATS_FILENAME,
+      encodeJsonContent(content),
+      currentSha ? 'Update LeetHub stats' : 'Create LeetHub stats',
+      currentSha
+    );
   } catch (err) {
     console.error('LeetHub: failed to write stats.json', err);
+    throw err;
   }
 }
 
@@ -377,11 +435,14 @@ async function saveLocalStats(counts) {
 }
 
 /**
- * Pure read, called on every popup open: pulls stats.json straight from the repo (one API
- * call) into local storage. Never falls back to computing it - by the time a popup can open,
- * stats.json is guaranteed to already exist (provisionRepoFiles runs at repo-link time, not
- * lazily here), so there is nothing to fall back to and no reason to risk ever triggering
- * the expensive README walk from this path.
+ * Called on every popup open: pulls stats.json straight from the repo (one API call) into
+ * local storage. For a repo linked after provisionRepoFiles existed, this is the only thing
+ * that ever runs here - stats.json is already guaranteed to exist from link time. The
+ * create-on-first-read fallback below exists only for a repo that was linked *before* this
+ * feature existed (a real case, not hypothetical - stats.json doesn't retroactively appear
+ * for repos linked in an earlier session) or had its stats.json deleted manually. It costs
+ * the expensive README walk exactly once, the same way syncConfigFromRepo already does for
+ * config.json - after that first walk, every later popup open is back to the one-call read.
  */
 async function syncStatsFromRepo() {
   const api = getBrowser();
@@ -392,7 +453,18 @@ async function syncStatsFromRepo() {
   if (!leethub_hook || !leethub_token) return null;
 
   const existing = await getRepoStats(leethub_hook, leethub_token);
-  return existing ? saveLocalStats(existing.counts) : null;
+  if (existing) {
+    return saveLocalStats(existing.counts);
+  }
+
+  try {
+    const counts = await computeStatsFromReadmes(leethub_hook, leethub_token);
+    await putRepoStats(leethub_hook, leethub_token, counts);
+    return saveLocalStats(counts);
+  } catch (err) {
+    console.error('LeetHub: failed to compute stats.json', err);
+    return null;
+  }
 }
 
 /** Forces a full README re-walk and overwrites stats.json - used both to provision a repo
@@ -470,17 +542,22 @@ async function getRepoConfig(hook, token) {
 /** Creates or updates config.json in the linked repo (pass the existing sha to update). */
 async function putRepoConfig(hook, token, config, sha) {
   try {
-    await fetch(`https://api.github.com/repos/${hook}/contents/${CONFIG_FILENAME}`, {
-      method: 'PUT',
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
-      body: JSON.stringify({
-        message: sha ? 'Update LeetHub config' : 'Create LeetHub config',
-        content: btoa(unescape(encodeURIComponent(JSON.stringify(config, null, 2)))),
-        sha,
-      }),
-    });
+    let currentSha = sha;
+    if (!currentSha) {
+      const existing = await getRepoConfig(hook, token);
+      currentSha = existing?.sha;
+    }
+    await putRepoFile(
+      hook,
+      token,
+      CONFIG_FILENAME,
+      encodeJsonContent(config),
+      currentSha ? 'Update LeetHub config' : 'Create LeetHub config',
+      currentSha
+    );
   } catch (err) {
     console.error('LeetHub: failed to write config.json', err);
+    throw err;
   }
 }
 
@@ -509,6 +586,25 @@ async function syncConfigFromRepo() {
   await putRepoConfig(leethub_hook, leethub_token, local);
 }
 
+async function ensureRepoReadme(hook, token) {
+  const existing = await fetch(`https://api.github.com/repos/${hook}/contents/${README_FILENAME}`, {
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+  });
+
+  if (existing.ok) return;
+  if (existing.status !== 404) {
+    throw new Error(`GitHub read failed for ${README_FILENAME}: HTTP ${existing.status}`);
+  }
+
+  await putRepoFile(
+    hook,
+    token,
+    README_FILENAME,
+    btoa(unescape(encodeURIComponent(DEFAULT_REPO_README))),
+    'Create README - LeetHub'
+  );
+}
+
 /**
  * Builds config.json and stats.json the moment a repo is linked/created, not lazily on the
  * next popup open - so both files are guaranteed to already exist by the time anything reads
@@ -519,7 +615,16 @@ async function syncConfigFromRepo() {
  * default behavior.
  */
 async function provisionRepoFiles() {
-  const [stats] = await Promise.all([recomputeStatsFromRepo(), syncConfigFromRepo()]);
+  const api = getBrowser();
+  const { leethub_hook, leethub_token } = await api.storage.local.get([
+    'leethub_hook',
+    'leethub_token',
+  ]);
+  if (!leethub_hook || !leethub_token) return null;
+
+  await ensureRepoReadme(leethub_hook, leethub_token);
+  await syncConfigFromRepo();
+  const stats = await syncStatsFromRepo();
   return stats;
 }
 
@@ -563,4 +668,5 @@ export {
   pushStatsToRepo,
   recomputeStatsFromRepo,
   syncStatsFromRepo,
+  computeStatsFromReadmes,
 };

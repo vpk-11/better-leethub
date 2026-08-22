@@ -24,7 +24,7 @@ const discussionMsg = 'Prepend discussion post - LeetHub';
 const createNotesMsg = 'Attach NOTES - LeetHub';
 const solutionPostFallbackMsg = 'Add solution post - LeetHub';
 const defaultRepoReadme =
-  'A collection of LeetCode questions to ace the coding interview! - Created using [LeetHub v2](https://github.com/arunbhardwaj/LeetHub-2.0)';
+  'A collection of LeetCode questions to ace the coding interview! - Created using [LeetHub](https://github.com/vpk-11/LeetHub-2.0)';
 const readmeFilename = 'README.md';
 
 // problem types
@@ -137,26 +137,61 @@ const getAndInitializeStats = problem => {
 const incrementStats = (difficulty, problem) => {
   const diff = getDifficulty(difficulty);
   return api.storage.local.get('stats').then(({ stats }) => {
-    stats.solved += 1;
-    stats.easy += diff === DIFFICULTY.EASY ? 1 : 0;
-    stats.medium += diff === DIFFICULTY.MEDIUM ? 1 : 0;
-    stats.hard += diff === DIFFICULTY.HARD ? 1 : 0;
-    stats.shas[problem].difficulty = diff.toLowerCase();
+    if (!stats) {
+      stats = { solved: 0, easy: 0, medium: 0, hard: 0, shas: {} };
+    }
+    stats.solved = (stats.solved || 0) + 1;
+    stats.easy = (stats.easy || 0) + (diff === DIFFICULTY.EASY ? 1 : 0);
+    stats.medium = (stats.medium || 0) + (diff === DIFFICULTY.MEDIUM ? 1 : 0);
+    stats.hard = (stats.hard || 0) + (diff === DIFFICULTY.HARD ? 1 : 0);
+    stats.shas = stats.shas || {};
+    if (problem) {
+      stats.shas[problem] = stats.shas[problem] || {};
+      stats.shas[problem].difficulty = diff.toLowerCase();
+    }
     api.storage.local.set({ stats });
     return stats;
   });
 };
 
-const isCompleted = problemName => {
-  return api.storage.local.get('stats').then(data => {
-    if (data?.stats?.shas?.[problemName] == null) return false;
+const isCompleted = async problemPath => {
+  const { stats, leethub_hook, leethub_token } = await api.storage.local.get([
+    'stats',
+    'leethub_hook',
+    'leethub_token',
+  ]);
 
-    for (let file of Object.keys(data?.stats?.shas?.[problemName])) {
-      if (file.includes(problemName)) return true;
+  if (stats?.shas?.[problemPath]) {
+    const keys = Object.keys(stats.shas[problemPath]);
+    if (keys.length > 0) return true;
+  }
+
+  if (leethub_hook && leethub_token && problemPath) {
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${leethub_hook}/contents/${problemPath}/README.md`,
+        {
+          headers: {
+            Authorization: `token ${leethub_token}`,
+            Accept: 'application/vnd.github.v3+json',
+          },
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const existingStats = stats || { solved: 0, easy: 0, medium: 0, hard: 0, shas: {} };
+        existingStats.shas = existingStats.shas || {};
+        existingStats.shas[problemPath] = existingStats.shas[problemPath] || {};
+        existingStats.shas[problemPath]['README.md'] = data.sha;
+        await api.storage.local.set({ stats: existingStats });
+        return true;
+      }
+    } catch (_err) {
+      // 404 or network error -> problem README does not exist yet
     }
+  }
 
-    return false;
-  });
+  return false;
 };
 
 /* Discussion posts prepended at top of README */
@@ -565,7 +600,7 @@ function loader(leetCode, suffix) {
       const uploadReadMe = await api.storage.local.get('stats').then(({ stats }) => {
         const shaExists = stats?.shas?.[problemPath]?.[readmeFilename] !== undefined;
 
-        if (!shaExists) {
+        if (!shaExists && !alreadyCompleted) {
           return uploadGitWith409Retry(
             encode(probStatement),
             problemPath,
