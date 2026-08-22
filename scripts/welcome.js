@@ -1,8 +1,8 @@
-import { getBrowser, syncCountsFromRepo } from './leetcode/util.js';
+import { getBrowser, recomputeStatsFromRepo, syncStatsFromRepo } from './leetcode/util.js';
 
 const api = getBrowser();
 
-/** Renders the reconciled stats returned by syncCountsFromRepo into the DOM. */
+/** Renders the reconciled stats returned by syncStatsFromRepo/recomputeStatsFromRepo. */
 const renderStats = stats => {
   if (!stats) return;
   $('#p_solved').text(stats.solved);
@@ -146,7 +146,7 @@ const linkRepo = (token, name) => {
         console.log('Successfully set new repo hook');
       }
     );
-    syncCountsFromRepo().then(renderStats);
+    syncStatsFromRepo().then(renderStats);
 
     /* Hide accordingly */
     document.getElementById('hook_mode').style.display = 'none';
@@ -243,7 +243,7 @@ $('#unlink a').on('click', () => {
 
 /* Matches 3.0's real placement: settings (folder toggles, timestamp, solution-post,
    commit-message template) live in the toolbar popup (popup.html/popup.js), not here. */
-$('#sync_counts').on('click', () => syncCountsFromRepo().then(renderStats));
+$('#sync_counts').on('click', () => recomputeStatsFromRepo().then(renderStats));
 
 /* Detect mode type */
 const checkModeType = () => {

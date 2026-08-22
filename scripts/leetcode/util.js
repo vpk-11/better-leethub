@@ -279,35 +279,29 @@ const fetchRepoContent = async (hook, token, path) => {
 };
 
 /**
- * Reconciles local stats against the real repo state - 3.0's actual mechanism (not a
- * separate stats.json cache, not hash-based). Recursively walks the linked repo via the
- * Contents API and parses the difficulty out of every per-problem README.md's
- * `<h3>{difficulty}</h3>` tag. Shared between popup.js (auto, on every popup open) and
- * welcome.js (auto on link, plus the manual "Sync Problem Counts" link) so both surfaces
- * stay in sync without duplicating the walk logic.
+ * Recursively walks the linked repo via the Contents API and parses the difficulty out of
+ * every per-problem README.md's `<h3>{difficulty}</h3>` tag - the expensive path (one
+ * network request per problem). Only ever called once per repo (see syncStatsFromRepo
+ * below) or on an explicit manual re-sync - NOT on every popup open. Doing that was the
+ * actual bug: for a repo with 100+ solved problems it fires 100+ sequential GitHub API
+ * calls, which reliably trips GitHub's secondary rate limit and silently produces
+ * incomplete/wrong counts.
  */
-async function syncCountsFromRepo() {
-  const api = getBrowser();
-  const { leethub_hook, leethub_token } = await api.storage.local.get([
-    'leethub_hook',
-    'leethub_token',
-  ]);
-  if (!leethub_hook || !leethub_token) return null;
-
+async function computeStatsFromReadmes(hook, token) {
   const stats = { solved: 0, easy: 0, medium: 0, hard: 0 };
 
   const walk = async contents => {
     for (const item of contents) {
       try {
         if (item.name.toLowerCase() === 'readme.md' && item.path !== 'README.md') {
-          const content = await fetchRepoContent(leethub_hook, leethub_token, item.path);
+          const content = await fetchRepoContent(hook, token, item.path);
           const difficulty = content.split('<h3>')[1]?.split('</h3>')[0]?.trim().toLowerCase();
           if (difficulty === 'easy' || difficulty === 'medium' || difficulty === 'hard') {
             stats[difficulty] += 1;
             stats.solved += 1;
           }
         } else if (item.type === 'dir') {
-          await walk(await fetchRepoContent(leethub_hook, leethub_token, item.path));
+          await walk(await fetchRepoContent(hook, token, item.path));
         }
       } catch (err) {
         console.error(`LeetHub: failed to process ${item.path}`, err);
@@ -315,19 +309,125 @@ async function syncCountsFromRepo() {
     }
   };
 
+  await walk(await fetchRepoContent(hook, token, ''));
+  return stats;
+}
+
+const STATS_FILENAME = 'stats.json';
+
+/** Reads stats.json from the linked repo. Returns { stats, sha }, or null if it doesn't
+ * exist yet or the request fails. */
+async function getRepoStats(hook, token) {
   try {
-    await walk(await fetchRepoContent(leethub_hook, leethub_token, ''));
+    const res = await fetch(`https://api.github.com/repos/${hook}/contents/${STATS_FILENAME}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return { stats: JSON.parse(atob(data.content)), sha: data.sha };
   } catch (err) {
-    console.error('LeetHub: failed to sync counts from repo', err);
+    console.error('LeetHub: failed to read stats.json', err);
     return null;
   }
+}
 
-  // Keep the existing sha cache - only the difficulty counts are being reconciled.
+/** Creates or updates stats.json in the linked repo (pass the existing sha to update). */
+async function putRepoStats(hook, token, stats, sha) {
+  try {
+    await fetch(`https://api.github.com/repos/${hook}/contents/${STATS_FILENAME}`, {
+      method: 'PUT',
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+      body: JSON.stringify({
+        message: sha ? 'Update LeetHub stats' : 'Create LeetHub stats',
+        content: btoa(unescape(encodeURIComponent(JSON.stringify(stats, null, 2)))),
+        sha,
+      }),
+    });
+  } catch (err) {
+    console.error('LeetHub: failed to write stats.json', err);
+  }
+}
+
+/** Saves { solved, easy, medium, hard } into local storage.stats, keeping the existing sha
+ * cache (upload-dedup bookkeeping, local-only, never mirrored to stats.json). */
+async function saveLocalStats(counts) {
+  const api = getBrowser();
   const { stats: existing } = await api.storage.local.get('stats');
-  stats.shas = existing?.shas ?? {};
-
+  const stats = { ...counts, shas: existing?.shas ?? {} };
   await api.storage.local.set({ stats });
   return stats;
+}
+
+/**
+ * Fast path, called on every popup open: pulls stats.json straight from the repo (one API
+ * call) into local storage. If it doesn't exist yet - a brand new repo, or an existing one
+ * with problems solved before this feature existed - computes it once via the expensive
+ * README walk and writes it, so every later call just pulls the cached file.
+ */
+async function syncStatsFromRepo() {
+  const api = getBrowser();
+  const { leethub_hook, leethub_token } = await api.storage.local.get([
+    'leethub_hook',
+    'leethub_token',
+  ]);
+  if (!leethub_hook || !leethub_token) return null;
+
+  const existing = await getRepoStats(leethub_hook, leethub_token);
+  if (existing) {
+    return saveLocalStats(existing.stats);
+  }
+
+  try {
+    const counts = await computeStatsFromReadmes(leethub_hook, leethub_token);
+    await putRepoStats(leethub_hook, leethub_token, counts);
+    return saveLocalStats(counts);
+  } catch (err) {
+    console.error('LeetHub: failed to compute stats.json', err);
+    return null;
+  }
+}
+
+/** Forces a full README re-walk regardless of whether stats.json already exists, and
+ * overwrites it - for the manual "Sync Problem Counts" link, when the cached file has
+ * drifted from the repo's real state (e.g. problems added/removed outside the extension). */
+async function recomputeStatsFromRepo() {
+  const api = getBrowser();
+  const { leethub_hook, leethub_token } = await api.storage.local.get([
+    'leethub_hook',
+    'leethub_token',
+  ]);
+  if (!leethub_hook || !leethub_token) return null;
+
+  try {
+    const [counts, existing] = await Promise.all([
+      computeStatsFromReadmes(leethub_hook, leethub_token),
+      getRepoStats(leethub_hook, leethub_token),
+    ]);
+    await putRepoStats(leethub_hook, leethub_token, counts, existing?.sha);
+    return saveLocalStats(counts);
+  } catch (err) {
+    console.error('LeetHub: failed to recompute stats.json', err);
+    return null;
+  }
+}
+
+/** Pushes the current local stats counts to stats.json in the repo - call right after a
+ * new problem is pushed, alongside the README-topic-table update, so stats.json stays a
+ * running total instead of drifting until the next full recompute. */
+async function pushStatsToRepo() {
+  const api = getBrowser();
+  const { leethub_hook, leethub_token } = await api.storage.local.get([
+    'leethub_hook',
+    'leethub_token',
+  ]);
+  if (!leethub_hook || !leethub_token) return;
+
+  const { stats } = await api.storage.local.get('stats');
+  if (!stats) return;
+  const { solved, easy, medium, hard } = stats;
+
+  const existing = await getRepoStats(leethub_hook, leethub_token);
+  await putRepoStats(leethub_hook, leethub_token, { solved, easy, medium, hard }, existing?.sha);
 }
 
 const CONFIG_FILENAME = 'config.json';
@@ -436,5 +536,7 @@ export {
   parseCustomCommitMessage,
   pushConfigToRepo,
   syncConfigFromRepo,
-  syncCountsFromRepo,
+  pushStatsToRepo,
+  recomputeStatsFromRepo,
+  syncStatsFromRepo,
 };

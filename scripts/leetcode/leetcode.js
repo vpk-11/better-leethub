@@ -13,6 +13,7 @@ import {
   isEmptyObject,
   LeetHubError,
   parseCustomCommitMessage,
+  pushStatsToRepo,
 } from './util.js';
 import { appendProblemToReadme, sortTopicsInReadme } from './readmeTopics.js';
 
@@ -610,7 +611,9 @@ function loader(leetCode, suffix) {
       leetCode.markUploaded();
 
       if (!alreadyCompleted) {
-        incrementStats(leetCode.difficulty, problemPath);
+        // Keep stats.json as a running total instead of letting it drift until the next
+        // full recompute (see pushStatsToRepo in util.js).
+        incrementStats(leetCode.difficulty, problemPath).then(pushStatsToRepo);
       }
     } catch (err) {
       leetCode.markUploadFailed();
