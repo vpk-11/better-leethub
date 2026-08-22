@@ -20,24 +20,6 @@ const pushConfigToRepo = () => api.runtime.sendMessage({ type: 'PUSH_CONFIG' });
 $('#welcome_URL').attr('href', api.runtime.getURL('welcome.html'));
 $('#hook_URL').attr('href', api.runtime.getURL('welcome.html'));
 $('#authenticate').attr('href', api.runtime.getURL('welcome.html'));
-$('#reset_stats').on('click', () => {
-  $('#reset_confirmation').show();
-  $('#reset_yes')
-    .off('click')
-    .on('click', () => {
-      api.storage.local.set({ stats: null });
-      $('#p_solved').text(0);
-      $('#p_solved_easy').text(0);
-      $('#p_solved_medium').text(0);
-      $('#p_solved_hard').text(0);
-      $('#reset_confirmation').hide();
-    });
-  $('#reset_no')
-    .off('click')
-    .on('click', () => {
-      $('#reset_confirmation').hide();
-    });
-});
 
 /* Folder structure, timestamped filenames, solution-post auto-commit, commit-message
    template: 3.0's real settings, ported to this codebase's own leethub_-prefixed storage
