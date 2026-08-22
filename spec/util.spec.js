@@ -1,4 +1,70 @@
-import { mergeStats } from '../scripts/leetcode/util.js';
+import {
+  buildProblemPath,
+  mergeStats,
+  parseCustomCommitMessage,
+} from '../scripts/leetcode/util.js';
+
+describe('buildProblemPath', () => {
+  const problem = '0001-two-sum';
+  const difficulty = 'Easy';
+  const language = 'Python3';
+
+  it('always prefixes LeetCode/, with no folders on', () => {
+    expect(
+      buildProblemPath(problem, difficulty, language, {
+        folderDifficulty: false,
+        folderLanguage: false,
+      })
+    ).toBe('LeetCode/0001-two-sum');
+  });
+
+  it('difficulty folder only', () => {
+    expect(
+      buildProblemPath(problem, difficulty, language, {
+        folderDifficulty: true,
+        folderLanguage: false,
+      })
+    ).toBe('LeetCode/Easy/0001-two-sum');
+  });
+
+  it('language folder only', () => {
+    expect(
+      buildProblemPath(problem, difficulty, language, {
+        folderDifficulty: false,
+        folderLanguage: true,
+      })
+    ).toBe('LeetCode/Python3/0001-two-sum');
+  });
+
+  it('language wins over difficulty when both are on - difficulty nests inside language', () => {
+    expect(
+      buildProblemPath(problem, difficulty, language, {
+        folderDifficulty: true,
+        folderLanguage: true,
+      })
+    ).toBe('LeetCode/Python3/Easy/0001-two-sum');
+  });
+});
+
+describe('parseCustomCommitMessage', () => {
+  it('substitutes known variables', () => {
+    const template = '{date} - {problemName} - {problemTopic} - {difficulty} - {language}';
+    const context = {
+      date: '08-22-2026',
+      problemName: '0001-two-sum',
+      problemTopic: 'Array',
+      difficulty: 'Easy',
+      language: 'Python3',
+    };
+    expect(parseCustomCommitMessage(template, context)).toBe(
+      '08-22-2026 - 0001-two-sum - Array - Easy - Python3'
+    );
+  });
+
+  it('leaves unknown placeholders as literal text', () => {
+    expect(parseCustomCommitMessage('{unknown} stays', {})).toBe('{unknown} stays');
+  });
+});
 
 describe('mergeStats', () => {
   it('should correctly merge stats', () => {

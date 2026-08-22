@@ -1,34 +1,27 @@
-let api = isChrome() ? chrome : isFirefox() ? browser : undefined;
+import {
+  getBrowser,
+  pushConfigToRepo,
+  syncConfigFromRepo,
+  syncCountsFromRepo,
+} from './leetcode/util.js';
 
-// const ONE_HOUR_MS = 60 * 60 * 1000;
+const api = getBrowser();
 
-api.runtime.onInstalled.addListener(details => {
-  if (details.reason === 'install') {
-    // Allow persistent stats to sync on repo link
-    api.storage.local.set({ sync_stats: true});
+/* Sync (stats, config.json pull/push) runs here, not in popup.js: a toolbar popup's own JS
+   context gets torn down as soon as it closes or loses focus, which can kill an in-flight
+   fetch before storage.local.set ever runs - Firefox reaps popups more aggressively than
+   Chrome, which is why this was flaky there specifically. The background script persists
+   independent of the popup's lifecycle, so it can finish the work reliably on both browsers. */
+api.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  if (request?.type === 'POPUP_SYNC') {
+    Promise.all([syncCountsFromRepo(), syncConfigFromRepo()]).then(([stats]) => {
+      sendResponse({ stats });
+    });
+    return true; // keep the message channel open for the async response
   }
+  if (request?.type === 'PUSH_CONFIG') {
+    pushConfigToRepo().then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  return false;
 });
-
-api.runtime.onMessage.addListener(handleMessage);
-
-function handleMessage(request, sender, sendResponse) {
-  if (request.type === 'LEETCODE_SUBMISSION') {
-    api.webNavigation.onHistoryStateUpdated.addListener(
-      (e = function (details) {
-        const submissionId = details.url.match(/\/submissions\/(\d+)\//)[1];
-        sendResponse({ submissionId });
-        api.webNavigation.onHistoryStateUpdated.removeListener(e);
-      }),
-      { url: [{ hostSuffix: 'leetcode.com' }, { pathContains: 'submissions' }] }
-    );
-  }
-  return true;
-}
-
-function isChrome() {
-  return typeof chrome !== 'undefined' && typeof chrome.runtime !== 'undefined';
-}
-
-function isFirefox() {
-  return typeof browser !== 'undefined' && typeof browser.runtime !== 'undefined';
-}

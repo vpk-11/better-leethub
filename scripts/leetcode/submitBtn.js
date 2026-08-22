@@ -1,6 +1,9 @@
-import { getBrowser } from "./util.js";
-
-let api = getBrowser()
+/* Manual "Push" button - lives on the submission/results page (not the code editor), by
+   explicit project-owner preference: a re-push/fallback/versioning control that reads more
+   naturally next to the Accepted result than sitting in the editor toolbar. Auto-push (the
+   primary path) is handled passively by listenForAutoSubmit in leetcode.js via the
+   MAIN-world interceptor - this button exists for re-pushing an already-viewed submission or
+   adding a versioned suffix (right-click), not for detection. */
 
 const getSubmissionPageBtns = () => {
   return document.querySelector('.flex.flex-none.gap-2:not(.justify-center):not(.justify-between)');
@@ -10,7 +13,7 @@ const createToolTip = () => {
   const toolTip = document.createElement('div');
   toolTip.id = 'leethub-upload-tooltip';
   toolTip.textContent =
-    'Manually upload this submission to GitHub (beta).\nThis will OVERWRITE your current submission.\nPlease be mindful of your GitHub rate-limits.';
+    'Push this submission to GitHub.\nRight-click to add a suffix and keep multiple versions.\nPlease be mindful of your GitHub rate-limits.';
   toolTip.className =
     'fixed bg-sd-popover text-sd-popover-foreground rounded-sd-md z-modal text-xs text-left font-normal whitespace-pre-line shadow p-3 border-sd-border border cursor-default translate-y-20 transition-opacity opacity-0 transition-delay-1000 duration-300 group-hover:opacity-100';
   return toolTip;
@@ -38,85 +41,75 @@ const createGitIcon = () => {
   return uploadIcon;
 };
 
-function addManualSubmitBtn(eventHandler) {
+/* Validate if string can be added as suffix. Can add more constraints if necessary. */
+function isValidSuffix(suffix) {
+  if (!suffix || suffix.length > 255) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Inserts the manual "Push" button into the submission page's button row.
+ * @param {LeetCodeV2} leetCode
+ * @param {(leetCode: LeetCodeV2, suffix?: string) => void} loader
+ */
+function addManualSubmitBtn(leetCode, loader) {
+  if (document.getElementById('manualGitSubmit')) return;
   const btns = getSubmissionPageBtns();
-  if (btns.innerText.includes('Solution') && !btns.innerText.includes('LeetHub')) {
-    btns.appendChild(
-      (() => {
-        const btn = document.createElement('button');
-        btn.innerText = 'Sync w/ LeetHub';
-        btn.setAttribute('style', 'background-color:darkorange');
-        btn.setAttribute(
-          'class',
-          'group whitespace-nowrap focus:outline-none text-label-r bg-green-s dark:bg-dark-blue-s hover:bg-green-3 dark:hover:bg-dark-blue-3 flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium'
-        );
+  if (!btns || btns.innerText.includes('LeetHub')) return;
 
-        btn.prepend(createGitIcon());
-        btn.appendChild(createToolTip());
-        btn.addEventListener('click', eventHandler);
-        return btn;
-      })()
+  /* leetCode.submissionId is only ever populated by the auto-detect interceptor path THIS
+     session (see listenForAutoSubmit in leetcode.js). Viewing an already-accepted
+     submission's results page directly - no fresh /submit/ fetch happened this session -
+     leaves it undefined, so init()'s GraphQL query silently fails. Fall back to parsing it
+     out of the current URL (this page's own URL always has it) before pushing. */
+  const resolveSubmissionId = () => {
+    if (!leetCode.submissionId) {
+      const match = window.location.href.match(/\/submissions\/(\d+)/);
+      if (match) leetCode.submissionId = match[1];
+    }
+  };
+
+  const submitButton = document.createElement('button');
+  submitButton.id = 'manualGitSubmit';
+  submitButton.className =
+    'group whitespace-nowrap focus:outline-none text-label-r bg-green-s dark:bg-dark-blue-s hover:bg-green-3 dark:hover:bg-dark-blue-3 flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium';
+  submitButton.setAttribute('style', 'background-color:darkorange');
+  submitButton.textContent = 'Push ';
+  submitButton.prepend(createGitIcon());
+  submitButton.appendChild(createToolTip());
+  submitButton.addEventListener('click', () => {
+    resolveSubmissionId();
+    loader(leetCode);
+  });
+  submitButton.addEventListener('contextmenu', event => {
+    event.preventDefault();
+    const suffix = prompt(
+      'Add a suffix for this solution file, i.e., -bfs, -dfs. \r\nWe recommend not including special characters except for "-".'
     );
-  }
-}
-
-function setupManualSubmitBtn(submitBtnHandler) {
-  // Detect when submissionPageBtns load.
-  const submissionPageBtnsObserver = new MutationObserver((_, observer) => {
-    const url = window.location.href;
-    const btns = getSubmissionPageBtns();
-
-    if (btns && btns.children.length < 3 && url.match(/\/submissions\//)) {
-      observer.disconnect();
-      addManualSubmitBtn(submitBtnHandler);
+    if (isValidSuffix(suffix)) {
+      resolveSubmissionId();
+      loader(leetCode, suffix);
     }
   });
 
-  // For continued SPA use, detect when LeetCode dynamic layout loads, set up click listener, then listen for btns. 
-  const pageObserver = new MutationObserver((_, observer) => {
-    // Display submission button on refresh trigger
-    if (window.location.href.match(/leetcode\.com\/(.*)\/submissions\/(\d+)/)) {
-      submissionPageBtnsObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
-      return
-    } 
-
-    const dynamicLayout = document.querySelector('.flexlayout__layout');
-    if (!dynamicLayout) {
-      return;
-    }
-    
-    observer.disconnect()
-
-    dynamicLayout.addEventListener('click', async () => {
-      const submissionId = await listenForSubmissionId();
-      if (submissionId) {
-        // listen for submission buttons
-        submissionPageBtnsObserver.observe(document.body, {
-          childList: true,
-          subtree: true,
-        });
-      }
-    });
-  });
-
-  pageObserver.observe(document.body, {
-    childList: true,
-    subtree: true,
-  })
+  btns.appendChild(submitButton);
 }
 
-// Get SubmissionID by listening for URL changes to `/submissions/(d+)` format
-async function listenForSubmissionId() {
-  const { submissionId } = await api.runtime.sendMessage({
-    type: 'LEETCODE_SUBMISSION',
+/**
+ * Watches for the submission page's button row to appear (SPA navigation, so this needs to
+ * keep observing rather than running once) and inserts the manual Push button.
+ * @param {LeetCodeV2} leetCode
+ * @param {(leetCode: LeetCodeV2, suffix?: string) => void} loader
+ */
+function setupManualSubmitBtn(leetCode, loader) {
+  const observer = new MutationObserver(() => {
+    if (window.location.href.match(/\/submissions\//) && getSubmissionPageBtns()) {
+      addManualSubmitBtn(leetCode, loader);
+    }
   });
-  if (submissionId == null) {
-    return;
-  }
-  return submissionId;
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 export default setupManualSubmitBtn;

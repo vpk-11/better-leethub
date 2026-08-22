@@ -1,27 +1,30 @@
 import { LeetCodeV1, LeetCodeV2 } from './versions.js';
 import setupManualSubmitBtn from './submitBtn.js';
 import {
-  debounce,
+  addLeadingZeros,
+  buildProblemPath,
+  convertToSlug,
   delay,
   DIFFICULTY,
   getBrowser,
   getDifficulty,
+  getTimestamp,
+  getTodaysDate,
   isEmptyObject,
   LeetHubError,
-  mergeStats,
+  parseCustomCommitMessage,
 } from './util.js';
 import { appendProblemToReadme, sortTopicsInReadme } from './readmeTopics.js';
 
 /* Commit messages */
 const readmeMsg = 'Create README - LeetHub';
 const updateReadmeMsg = 'Update README - Topic Tags';
-const updateStatsMsg = 'Updated stats';
 const discussionMsg = 'Prepend discussion post - LeetHub';
 const createNotesMsg = 'Attach NOTES - LeetHub';
+const solutionPostFallbackMsg = 'Add solution post - LeetHub';
 const defaultRepoReadme =
   'A collection of LeetCode questions to ace the coding interview! - Created using [LeetHub v2](https://github.com/arunbhardwaj/LeetHub-2.0)';
 const readmeFilename = 'README.md';
-const statsFilename = 'stats.json';
 
 // problem types
 const NORMAL_PROBLEM = 0;
@@ -141,48 +144,6 @@ const incrementStats = (difficulty, problem) => {
     api.storage.local.set({ stats });
     return stats;
   });
-};
-
-/**
- * Sets persistent stats and merges any cloud updates into local stats
- * @async
- * @param {Object} localStats - Local statistics about LeetCode problems.
- * @returns {Promise<void>} A promise that resolves to the sha of the newly updated `stats.json` file.
- *
- * @throws {Error} - If the upload operation fails for any reason other than 409 Conflict
- */
-const setPersistentStats = async localStats => {
-  let pStats = { leetcode: localStats };
-  const pStatsEncoded = encode(JSON.stringify(pStats));
-  const sha = localStats?.shas?.[readmeFilename]?.[''] || '';
-
-  const { leethub_token: token, leethub_hook: hook } = await api.storage.local.get([
-    'leethub_token',
-    'leethub_hook',
-  ]);
-
-  try {
-    return await upload(token, hook, pStatsEncoded, statsFilename, '', sha, updateStatsMsg);
-  } catch (e) {
-    if (e.message === '409') {
-      // Stats were updated on GitHub since last submission
-      const { content, sha } = await getGitHubFile(token, hook, statsFilename).then(res =>
-        res.json()
-      );
-      pStats = JSON.parse(decode(content));
-      const mergedStats = mergeStats(pStats.leetcode, localStats);
-      const mergedStatsEncoded = encode(JSON.stringify({ leetcode: mergedStats }));
-
-      // Update local stats with the changes from GitHub
-      await api.storage.local.set({ stats: mergedStats });
-
-      return await delay(
-        () => upload(token, hook, mergedStatsEncoded, statsFilename, '', sha, updateStatsMsg),
-        WAIT_FOR_GITHUB_API_TO_NOT_THROW_409_MS
-      );
-    }
-    throw e;
-  }
 };
 
 const isCompleted = problemName => {
@@ -369,7 +330,7 @@ function createRepoReadme() {
   return uploadGitWith409Retry(content, readmeFilename, '', readmeMsg);
 }
 
-async function updateReadmeTopicTagsWithProblem(topicTags, problemName) {
+async function updateReadmeTopicTagsWithProblem(topicTags, problemName, problemPath, difficulty) {
   if (topicTags == null) {
     console.log(new LeetHubError('TopicTagsNotFound'));
     return;
@@ -401,7 +362,14 @@ async function updateReadmeTopicTagsWithProblem(topicTags, problemName) {
   }
   readme = decode(readme);
   for (let topic of topicTags) {
-    readme = appendProblemToReadme(topic.name, readme, leethub_hook, problemName);
+    readme = appendProblemToReadme(
+      topic.name,
+      readme,
+      leethub_hook,
+      problemName,
+      problemPath,
+      difficulty
+    );
   }
   readme = sortTopicsInReadme(readme);
   readme = encode(readme);
@@ -412,8 +380,121 @@ async function updateReadmeTopicTagsWithProblem(topicTags, problemName) {
   );
 }
 
-/** @param {LeetCodeV1 | LeetCodeV2} leetCode */
-function loader(leetCode) {
+/** Returns the custom commit message template with {vars} substituted, or null if none is set. */
+const getCustomCommitMessage = async problemContext => {
+  const { leethub_custom_commit_message } = await api.storage.local.get(
+    'leethub_custom_commit_message'
+  );
+  if (!leethub_custom_commit_message || !leethub_custom_commit_message.trim()) {
+    return null;
+  }
+  return parseCustomCommitMessage(leethub_custom_commit_message, problemContext);
+};
+
+/**
+ * Resolves a LeetCode "Solution" writeup's questionSlug to this codebase's problemName slug
+ * (e.g. "0001-two-sum"), via the same GraphQL question lookup 3.0 uses.
+ */
+async function questionSlugToProblemName(questionSlug) {
+  const query = {
+    query:
+      'query questionDetail($titleSlug: String!) { question(titleSlug: $titleSlug) { questionFrontendId titleSlug } }',
+    variables: { titleSlug: questionSlug },
+    operationName: 'questionDetail',
+  };
+
+  try {
+    const res = await fetch('https://leetcode.com/graphql/', {
+      method: 'POST',
+      headers: { cookie: document.cookie, 'content-type': 'application/json' },
+      body: JSON.stringify(query),
+    }).then(r => r.json());
+
+    const question = res?.data?.question;
+    if (question) {
+      return addLeadingZeros(`${question.questionFrontendId}-${question.titleSlug}`);
+    }
+  } catch (err) {
+    console.log('LeetHub: failed to resolve question slug', err);
+  }
+  return addLeadingZeros(convertToSlug(questionSlug));
+}
+
+/**
+ * Best-effort: reuses the last non-README/NOTES/solution-post commit message for this problem
+ * so Solution.md's commit doesn't just say the generic fallback with no context. Matches 3.0's
+ * real (already best-effort) behavior - it searches by the bare problem slug regardless of
+ * folder settings, so a commit under a difficulty/language-prefixed path won't match and this
+ * falls back to the default message. That's an existing 3.0 limitation, not something to fix
+ * here.
+ */
+async function getLastCommitMessage(problemName) {
+  const { leethub_token, leethub_hook } = await api.storage.local.get([
+    'leethub_token',
+    'leethub_hook',
+  ]);
+  if (!leethub_token || !leethub_hook) return solutionPostFallbackMsg;
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${leethub_hook}/commits?path=${problemName}&per_page=10`,
+      {
+        headers: {
+          Authorization: `token ${leethub_token}`,
+          Accept: 'application/vnd.github.v3+json',
+        },
+      }
+    );
+    if (res.ok) {
+      const commits = await res.json();
+      for (const commit of commits) {
+        const message = commit.commit.message;
+        if (
+          /^(Create README|Attach NOTES|Prepend discussion post|Add solution post)/.test(message)
+        ) {
+          continue;
+        }
+        return message;
+      }
+    }
+  } catch (err) {
+    console.log('LeetHub: failed to look up last commit message', err);
+  }
+  return solutionPostFallbackMsg;
+}
+
+/**
+ * Uploads a published LeetCode "Solution" writeup as Solution.md alongside the problem's code.
+ * Fired by the MAIN-world interceptor (see interceptor.js) via the `leetHubSolutionPost` event,
+ * since an isolated-world content script can't observe the page's own GraphQL mutation.
+ */
+async function handleSolutionPost(questionSlug, content, title) {
+  const { leethub_auto_commit_solution_post = true } = await api.storage.local.get(
+    'leethub_auto_commit_solution_post'
+  );
+  if (!leethub_auto_commit_solution_post) return;
+
+  try {
+    const problemName = await questionSlugToProblemName(questionSlug);
+    const commitMsg = await getLastCommitMessage(problemName);
+    const solutionContent = `# ${title}\n\n${content}`;
+    await uploadGitWith409Retry(encode(solutionContent), problemName, 'Solution.md', commitMsg);
+  } catch (err) {
+    console.log('LeetHub: failed to upload solution post', err);
+  }
+}
+
+window.addEventListener('leetHubSolutionPost', event => {
+  const { questionSlug, content, title } = event.detail;
+  handleSolutionPost(questionSlug, content, title);
+});
+
+/**
+ * @param {LeetCodeV1 | LeetCodeV2} leetCode
+ * @param {string} [suffix] - optional versioning suffix from the manual Push button's
+ *   right-click prompt, e.g. "-bfs" - keeps multiple solution files per problem.
+ */
+function loader(leetCode, suffix) {
   let iterations = 0;
   const intervalId = setInterval(async () => {
     try {
@@ -445,21 +526,48 @@ function loader(leetCode) {
       }
 
       const problemName = leetCode.getProblemNameSlug();
-      const alreadyCompleted = await isCompleted(problemName);
       const language = leetCode.getLanguageExtension();
       if (!language) {
         throw new LeetHubError('LanguageNotFound');
       }
-      const filename = problemName + language;
+      const languageName = leetCode.getLanguageName();
+      if (!languageName) {
+        throw new LeetHubError('LanguageNotFound');
+      }
 
-      /* Upload README */
+      /* Folder structure: 3.0's real fixed-precedence 2-toggle system, plus this fork's
+         LeetCode/ top-level prefix (see buildProblemPath in util.js). languageName MUST come
+         from the platform's own language field, never a reverse lookup through the extension
+         table - multiple language names collide on the same extension. */
+      const {
+        leethub_use_difficulty_folder,
+        leethub_use_language_folder,
+        leethub_use_timestamp_filename,
+      } = await api.storage.local.get([
+        'leethub_use_difficulty_folder',
+        'leethub_use_language_folder',
+        'leethub_use_timestamp_filename',
+      ]);
+      const problemPath = buildProblemPath(problemName, leetCode.difficulty, languageName, {
+        folderDifficulty: !!leethub_use_difficulty_folder,
+        folderLanguage: !!leethub_use_language_folder,
+      });
+      const suffixPart = suffix || '';
+      const filename = leethub_use_timestamp_filename
+        ? `${problemName}${suffixPart}-${getTimestamp()}${language}`
+        : `${problemName}${suffixPart}${language}`;
+
+      const alreadyCompleted = await isCompleted(problemPath);
+
+      /* Upload README - write-once: matches 3.0's real behavior, not overwritten on repeat
+         submissions to the same problem. */
       const uploadReadMe = await api.storage.local.get('stats').then(({ stats }) => {
-        const shaExists = stats?.shas?.[problemName]?.[readmeFilename] !== undefined;
+        const shaExists = stats?.shas?.[problemPath]?.[readmeFilename] !== undefined;
 
         if (!shaExists) {
           return uploadGitWith409Retry(
             encode(probStatement),
-            problemName,
+            problemPath,
             readmeFilename,
             readmeMsg
           );
@@ -470,26 +578,39 @@ function loader(leetCode) {
       const notes = leetCode.getNotesIfAny();
       let uploadNotes;
       if (notes != undefined && notes.length > 0) {
-        uploadNotes = uploadGitWith409Retry(encode(notes), problemName, 'NOTES.md', createNotesMsg);
+        uploadNotes = uploadGitWith409Retry(encode(notes), problemPath, 'NOTES.md', createNotesMsg);
       }
 
-      /* Upload code to Git */
+      /* Commit message: 3.0's real template variables (not decisions.md's older paraphrase). */
       const code = leetCode.findCode(probStats);
-      const uploadCode = uploadGitWith409Retry(encode(code), problemName, filename, probStats);
+      const problemContext = {
+        date: getTodaysDate(),
+        problemName,
+        problemTopic: leetCode.submissionData?.question?.topicTags?.[0]?.name ?? 'Unknown',
+        difficulty: leetCode.difficulty,
+        language: languageName,
+        time: leetCode.submissionData?.runtimeDisplay ?? '',
+        space: leetCode.submissionData?.memoryDisplay ?? '',
+      };
+      const commitMsg = (await getCustomCommitMessage(problemContext)) ?? probStats;
+
+      /* Upload code to Git */
+      const uploadCode = uploadGitWith409Retry(encode(code), problemPath, filename, commitMsg);
 
       /* Group problem into its relevant topics */
       const updateRepoReadMe = updateReadmeTopicTagsWithProblem(
         leetCode.submissionData?.question?.topicTags,
-        problemName
+        problemName,
+        problemPath,
+        leetCode.difficulty
       );
 
-      const newSHAs = await Promise.all([uploadReadMe, uploadNotes, uploadCode, updateRepoReadMe]);
+      await Promise.all([uploadReadMe, uploadNotes, uploadCode, updateRepoReadMe]);
 
       leetCode.markUploaded();
 
       if (!alreadyCompleted) {
-        // Increments local and persistent stats
-        incrementStats(leetCode.difficulty, problemName).then(setPersistentStats);
+        incrementStats(leetCode.difficulty, problemPath);
       }
     } catch (err) {
       leetCode.markUploadFailed();
@@ -504,55 +625,17 @@ function loader(leetCode) {
 }
 
 /**
- * Submit by Keyboard Shortcuts (only supported on LeetCode v2)
- * @param {Event} event
- * @returns
- */
-function wasSubmittedByKeyboard(event) {
-  const isEnterKey = event.key === 'Enter';
-  const isMacOS = window.navigator.userAgent.includes('Mac');
-
-  // Adapt to MacOS operating system
-  return isEnterKey && ((isMacOS && event.metaKey) || (!isMacOS && event.ctrlKey));
-}
-
-/**
- * Get SubmissionID by listening for URL changes to `/submissions/(d+)` format
- * @returns {string} submissionId
- */
-async function listenForSubmissionId() {
-  const { submissionId } = await api.runtime.sendMessage({
-    type: 'LEETCODE_SUBMISSION',
-  });
-  if (submissionId == null) {
-    console.log(new LeetHubError('SubmissionIdNotFound'));
-    return;
-  }
-  return submissionId;
-}
-
-/**
- * @param {Event} event
+ * Auto-push, matching 3.0's real mechanism: passively observe the submission network
+ * response (via the MAIN-world interceptor, see interceptor.js) instead of hooking the
+ * Submit button's click handler. No manual click required, and it fires the same way
+ * regardless of whether the user clicked Submit or used the keyboard shortcut.
  * @param {LeetCodeV2} leetCode
- * @returns {void}
  */
-async function v2SubmissionHandler(event, leetCode) {
-  if (event.type !== 'click' && !wasSubmittedByKeyboard(event)) {
-    return;
-  }
-
-  const authenticated =
-    !isEmptyObject(await api.storage.local.get(['leethub_token'])) &&
-    !isEmptyObject(await api.storage.local.get(['leethub_hook']));
-  if (!authenticated) {
-    throw new LeetHubError('UserNotAuthenticated');
-  }
-
-  // is click or is ctrl enter
-  const submissionId = await listenForSubmissionId();
-  leetCode.submissionId = submissionId;
-  loader(leetCode);
-  return true;
+function listenForAutoSubmit(leetCode) {
+  window.addEventListener('leetHubSubmissionId', event => {
+    leetCode.submissionId = event.detail.submissionId;
+    loader(leetCode);
+  });
 }
 
 // Use MutationObserver to determine when the submit button elements are loaded
@@ -579,10 +662,8 @@ const submitBtnObserver = new MutationObserver(function (_mutations, observer) {
     observer.disconnect();
 
     const leetCode = new LeetCodeV2();
-    if (!!!v2SubmitBtn.onclick) {
-      textarea.addEventListener('keydown', e => v2SubmissionHandler(e, leetCode));
-      v2SubmitBtn.onclick = e => v2SubmissionHandler(e, leetCode);
-    }
+    listenForAutoSubmit(leetCode);
+    setupManualSubmitBtn(leetCode, loader);
   }
 });
 
@@ -614,21 +695,6 @@ api.storage.local.get('isSync', data => {
     console.log('LeetHub Local storage already synced!');
   }
 });
-
-setupManualSubmitBtn(
-  debounce(
-    () => {
-      const leetCode = new LeetCodeV2();
-      // Manual submission event can only fire when we have submissionId. Simply retrieve it.
-      const submissionId = window.location.href.match(/leetcode\.com\/.*\/submissions\/(\d+)/)[1];
-      leetCode.submissionId = submissionId;
-      loader(leetCode);
-      return;
-    },
-    5000,
-    true
-  )
-);
 
 class LeetHubNetworkError extends LeetHubError {
   constructor(response) {

@@ -1,6 +1,15 @@
-import { getBrowser } from './leetcode/util.js';
+import { getBrowser, syncCountsFromRepo } from './leetcode/util.js';
 
 const api = getBrowser();
+
+/** Renders the reconciled stats returned by syncCountsFromRepo into the DOM. */
+const renderStats = stats => {
+  if (!stats) return;
+  $('#p_solved').text(stats.solved);
+  $('#p_solved_easy').text(stats.easy);
+  $('#p_solved_medium').text(stats.medium);
+  $('#p_solved_hard').text(stats.hard);
+};
 
 const option = () => {
   return $('#type').val();
@@ -19,48 +28,6 @@ const validateToken = async token => {
     headers: { Authorization: `token ${token}` },
   });
   return res.ok ? res.json() : null;
-};
-
-/* Sync's local storage with persistent stats and returns the pulled stats. Currently only syncs when we install, or unlink then relink */
-const syncStats = async () => {
-  let { leethub_hook, leethub_token, sync_stats, stats } = await api.storage.local.get([
-    'leethub_token',
-    'leethub_hook',
-    'sync_stats',
-    'stats',
-  ]);
-
-  if (sync_stats === false) {
-    console.log('Persistent stats already synced!');
-    return;
-  }
-
-  const URL = `https://api.github.com/repos/${leethub_hook}/contents/stats.json`;
-
-  let options = {
-    method: 'GET',
-    headers: {
-      Authorization: `token ${leethub_token}`,
-      Accept: 'application/vnd.github.v3+json',
-    },
-  };
-
-  let resp = await fetch(URL, options);
-  if (!resp.ok && resp.status == 404) {
-    await api.storage.local.set({ sync_stats: false });
-    console.log('No stats found; starting fresh');
-    return {};
-  }
-  let data = await resp.json();
-  let pStatsJson = decodeURIComponent(escape(atob(data.content)));
-  let pStats = await JSON.parse(pStatsJson);
-
-  api.storage.local.set({ stats: pStats.leetcode, sync_stats: false }, () =>
-    console.log(`Successfully synced local stats with GitHub stats`)
-  );
-
-  // emulate the nested return obj of api.storage.local.get('stats')
-  return { stats: pStats.leetcode };
 };
 
 const getCreateErrorString = (statusCode, name) => {
@@ -179,18 +146,7 @@ const linkRepo = (token, name) => {
         console.log('Successfully set new repo hook');
       }
     );
-    /* Get Persistent Stats or Create new stats */
-    api.storage.local
-      .get('sync_stats')
-      .then(data => (data?.sync_stats ? syncStats() : api.storage.local.get('stats')))
-      .then(data => {
-        /* Get problems solved count */
-        const stats = data?.stats;
-        $('#p_solved').text(stats?.solved ?? 0);
-        $('#p_solved_easy').text(stats?.easy ?? 0);
-        $('#p_solved_medium').text(stats?.medium ?? 0);
-        $('#p_solved_hard').text(stats?.hard ?? 0);
-      });
+    syncCountsFromRepo().then(renderStats);
 
     /* Hide accordingly */
     document.getElementById('hook_mode').style.display = 'none';
@@ -205,13 +161,10 @@ const linkRepo = (token, name) => {
 
 const unlinkRepo = () => {
   /* Reset mode type to hook, stats to null */
-  api.storage.local.set(
-    { mode_type: 'hook', leethub_hook: null, sync_stats: true, stats: null },
-    () => {
-      console.log(`Unlinked repo`);
-      console.log('Cleared local stats');
-    }
-  );
+  api.storage.local.set({ mode_type: 'hook', leethub_hook: null, stats: null }, () => {
+    console.log(`Unlinked repo`);
+    console.log('Cleared local stats');
+  });
 
   /* Hide accordingly */
   document.getElementById('hook_mode').style.display = 'inherit';
@@ -288,54 +241,58 @@ $('#unlink a').on('click', () => {
   $('#success').text('Successfully unlinked your current git repo. Please create/link a new hook.');
 });
 
+/* Matches 3.0's real placement: settings (folder toggles, timestamp, solution-post,
+   commit-message template) live in the toolbar popup (popup.html/popup.js), not here. */
+$('#sync_counts').on('click', () => syncCountsFromRepo().then(renderStats));
+
 /* Detect mode type */
 const checkModeType = () => {
   document.getElementById('auth_mode').style.display = 'none';
   api.storage.local.get('mode_type', data => {
-  const mode = data.mode_type;
+    const mode = data.mode_type;
 
-  if (mode && mode === 'commit') {
-    /* Check if still access to repo */
-    api.storage.local.get('leethub_token', data2 => {
-      const token = data2.leethub_token;
-      if (token === null || token === undefined) {
-        /* Not authorized yet. */
-        $('#error').text(
-          'Authorization error - Grant LeetHub access to your GitHub account to continue (click LeetHub extension on the top right to proceed)'
-        );
-        $('#error').show();
-        $('#success').hide();
-        /* Hide accordingly */
-        document.getElementById('hook_mode').style.display = 'inherit';
-        document.getElementById('commit_mode').style.display = 'none';
-      } else {
-        /* Get access to repo */
-        api.storage.local.get('leethub_hook', repoName => {
-          const hook = repoName.leethub_hook;
-          if (!hook) {
-            /* Not authorized yet. */
-            $('#error').text(
-              'Improper Authorization error - Grant LeetHub access to your GitHub account to continue (click LeetHub extension on the top right to proceed)'
-            );
-            $('#error').show();
-            $('#success').hide();
-            /* Hide accordingly */
-            document.getElementById('hook_mode').style.display = 'inherit';
-            document.getElementById('commit_mode').style.display = 'none';
-          } else {
-            /* Username exists, at least in storage. Confirm this */
-            linkRepo(token, hook);
-          }
-        });
-      }
-    });
+    if (mode && mode === 'commit') {
+      /* Check if still access to repo */
+      api.storage.local.get('leethub_token', data2 => {
+        const token = data2.leethub_token;
+        if (token === null || token === undefined) {
+          /* Not authorized yet. */
+          $('#error').text(
+            'Authorization error - Grant LeetHub access to your GitHub account to continue (click LeetHub extension on the top right to proceed)'
+          );
+          $('#error').show();
+          $('#success').hide();
+          /* Hide accordingly */
+          document.getElementById('hook_mode').style.display = 'inherit';
+          document.getElementById('commit_mode').style.display = 'none';
+        } else {
+          /* Get access to repo */
+          api.storage.local.get('leethub_hook', repoName => {
+            const hook = repoName.leethub_hook;
+            if (!hook) {
+              /* Not authorized yet. */
+              $('#error').text(
+                'Improper Authorization error - Grant LeetHub access to your GitHub account to continue (click LeetHub extension on the top right to proceed)'
+              );
+              $('#error').show();
+              $('#success').hide();
+              /* Hide accordingly */
+              document.getElementById('hook_mode').style.display = 'inherit';
+              document.getElementById('commit_mode').style.display = 'none';
+            } else {
+              /* Username exists, at least in storage. Confirm this */
+              linkRepo(token, hook);
+            }
+          });
+        }
+      });
 
-    document.getElementById('hook_mode').style.display = 'none';
-    document.getElementById('commit_mode').style.display = 'inherit';
-  } else {
-    document.getElementById('hook_mode').style.display = 'inherit';
-    document.getElementById('commit_mode').style.display = 'none';
-  }
+      document.getElementById('hook_mode').style.display = 'none';
+      document.getElementById('commit_mode').style.display = 'inherit';
+    } else {
+      document.getElementById('hook_mode').style.display = 'inherit';
+      document.getElementById('commit_mode').style.display = 'none';
+    }
   });
 };
 
@@ -354,7 +311,9 @@ $('#save_token').on('click', async () => {
   }
   const user = await validateToken(token);
   if (!user) {
-    $('#error').text('Invalid or expired token - generate a new fine-grained PAT with repo access and try again.');
+    $('#error').text(
+      'Invalid or expired token - generate a new fine-grained PAT with repo access and try again.'
+    );
     $('#error').show();
     return;
   }

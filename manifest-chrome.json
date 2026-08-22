@@ -18,12 +18,14 @@
   "background": {
     "service_worker": "scripts/background.js"
   },
-  "permissions": [
-    "unlimitedStorage",
-    "storage",
-    "webNavigation"
-  ],
+  "permissions": ["unlimitedStorage", "storage"],
   "content_scripts": [
+    {
+      "matches": ["https://leetcode.com/*"],
+      "js": ["scripts/interceptor.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": ["https://leetcode.com/*"],
       "js": ["scripts/leetcode.js"],

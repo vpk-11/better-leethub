@@ -57,16 +57,143 @@
             <span id="p_solved_hard" style="color: #000000; opacity: 0.75">0 </span>
           </p>
           <button id="reset_stats" type="button">Reset all stats</button>
-          <div id="reset_confirmation" style="position:absolute; display:none; top:200px; left:50%; width:500px; margin-left:-250px; border:1px solid blue; padding:20px; background-color:white;">
+          <div
+            id="reset_confirmation"
+            style="
+              position: absolute;
+              display: none;
+              top: 200px;
+              left: 50%;
+              width: 500px;
+              margin-left: -250px;
+              border: 1px solid blue;
+              padding: 20px;
+              background-color: white;
+            "
+          >
             <p>Are you sure you want to delete your stats?</p>
             <p>
-                <button id="reset_yes" type="button">
-                    Yes
-                </button>
-                <button id="reset_no" type="button">
-                    No
-                </button>
+              <button id="reset_yes" type="button">Yes</button>
+              <button id="reset_no" type="button">No</button>
             </p>
+          </div>
+
+          <!-- Toggle custom commit menu -->
+          <span id="collapsible-commit-message-icon" class="collapsible-icon">&#9654;</span>
+          Customize Commit Message
+
+          <div
+            id="collapsible-commit-message-container"
+            class="collapsible-container"
+            style="display: none"
+          >
+            <label for="variables">Available Variables</label>
+            <div id="variales">
+              <button class="commit-variable" id="time">Time (Time Percentile)</button>
+              <button class="commit-variable" id="space">Space (Space Percentile)</button>
+              <button class="commit-variable" id="date">Today's Date</button>
+              <button class="commit-variable" id="problemName">Problem Name</button>
+              <button class="commit-variable" id="difficulty">Difficulty</button>
+              <button class="commit-variable" id="language">Solved Language</button>
+              <button class="commit-variable" id="problemTopic">Problem Topic</button>
+            </div>
+            <textarea
+              rows="4"
+              id="custom-commit-msg"
+              placeholder="Time: {time}, Space: {space} - LeetHub"
+            ></textarea>
+            <div id="setting-btns">
+              <button class="setting-btns" id="msg-reset-btn">Reset</button>
+              <button class="setting-btns" id="msg-save-btn">Save</button>
+              <br />
+              <span id="success-message">Commit message saved!</span>
+            </div>
+          </div>
+
+          <!-- Toggle difficulty folder setting -->
+          <div>
+            <span id="collapsible-difficulty-icon" class="collapsible-icon">&#9654;</span> Use
+            Difficulty Subfolder
+            <div
+              id="collapsible-difficulty-container"
+              class="collapsible-container"
+              style="display: none"
+            >
+              <p>
+                Organize files into folders like
+                <code>LeetCode/Easy/0001-two-sum/0001-two-sum.js</code>
+              </p>
+              <div class="centered-toggle">
+                <div class="ui toggle checkbox">
+                  <input type="checkbox" id="use-difficulty-folder" />
+                  <label for="use-difficulty-folder"></label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Toggle language folder setting -->
+          <div>
+            <span id="collapsible-language-icon" class="collapsible-icon">&#9654;</span> Use
+            Language Subfolder
+            <div
+              id="collapsible-language-container"
+              class="collapsible-container"
+              style="display: none"
+            >
+              <p>
+                Organize files into folders like
+                <code>LeetCode/Python3/Easy/0001-two-sum/0001-two-sum.js</code>
+              </p>
+              <div class="centered-toggle">
+                <div class="ui toggle checkbox">
+                  <input type="checkbox" id="use-language-folder" />
+                  <label for="use-language-folder"></label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Toggle timestamped filenames setting -->
+          <div>
+            <span id="collapsible-timestamp-icon" class="collapsible-icon">&#9654;</span> Enable
+            Timestamped Filenames
+            <div
+              id="collapsible-timestamp-container"
+              class="collapsible-container"
+              style="display: none"
+            >
+              <p>
+                Save submissions like <code>0001-two-sum-08-22-2026-12-30-15.js</code> to preserve
+                versions.
+              </p>
+              <div class="centered-toggle">
+                <input type="checkbox" id="use-timestamp-filename" />
+                <label for="use-timestamp-filename">Add versioned filenames (timestamped)</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Toggle solution-post auto-commit setting -->
+          <div>
+            <span id="collapsible-solution-post-icon" class="collapsible-icon">&#9654;</span>
+            Auto-Commit Solution Posts
+            <div
+              id="collapsible-solution-post-container"
+              class="collapsible-container"
+              style="display: none"
+            >
+              <p>
+                Automatically commit your solution posts to GitHub as <code>Solution.md</code> files
+                when you publish them on LeetCode.
+              </p>
+              <div class="centered-toggle">
+                <div class="ui toggle checkbox">
+                  <input type="checkbox" id="auto-commit-solution-post" checked />
+                  <label for="auto-commit-solution-post"></label>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="ui small header">
@@ -92,7 +219,9 @@
         <a href="mailto:devkaisel@gmail.com" target="_blank" aria-label="Email"
           ><i class="ui red envelope icon"></i
         ></a>
-        <a id="welcome_URL" href="" target="_blank" aria-label="Homepage"><i class="ui grey globe icon"></i></a>
+        <a id="welcome_URL" href="" target="_blank" aria-label="Homepage"
+          ><i class="ui grey globe icon"></i
+        ></a>
       </div>
     </div>
 

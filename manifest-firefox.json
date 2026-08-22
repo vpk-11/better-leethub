@@ -18,8 +18,13 @@
   "background": {
     "scripts": ["scripts/background.js"]
   },
-  "permissions": ["unlimitedStorage", "storage", "webNavigation"],
+  "permissions": ["unlimitedStorage", "storage"],
   "content_scripts": [
+    {
+      "matches": ["https://leetcode.com/*"],
+      "js": ["scripts/interceptorLoader.js"],
+      "run_at": "document_start"
+    },
     {
       "matches": ["https://leetcode.com/*"],
       "js": ["scripts/leetcode.js"],
@@ -28,6 +33,12 @@
     {
       "matches": ["https://practice.geeksforgeeks.org/*"],
       "js": ["scripts/gfg.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["scripts/interceptor.js"],
+      "matches": ["https://leetcode.com/*"]
     }
   ],
   "content_security_policy": {

@@ -4,11 +4,22 @@ const leetCodeSectionStart = `<!---LeetCode Topics Start-->`;
 const leetCodeSectionHeader = `# LeetCode Topics`;
 const leetCodeSectionEnd = `<!---LeetCode Topics End-->`;
 
-function appendProblemToReadme(topic, markdownFile, hook, problem) {
-  const url = `https://github.com/${hook}/tree/master/${problem}`;
+/**
+ * @param {string} topic - Topic to which the problem will be added.
+ * @param {string} markdownFile - The markdown file content.
+ * @param {string} hook - github hook (username/repo).
+ * @param {string} problem - Problem slug, used as both the display text and the dedup key -
+ *   stable regardless of folder settings.
+ * @param {string} problemPath - The problem's actual directory path (may be prefixed with
+ *   LeetCode/, difficulty, and/or language folders per settings) - used only for the link URL.
+ * @param {string} difficulty - PascalCase difficulty, e.g. "Easy".
+ * @returns {string} - The updated markdown file content.
+ */
+function appendProblemToReadme(topic, markdownFile, hook, problem, problemPath, difficulty) {
+  const url = `https://github.com/${hook}/tree/main/${problemPath}`;
   const topicHeader = `## ${topic}`;
-  const topicTableHeader = `\n${topicHeader}\n|  |\n| ------- |\n`;
-  const newRow = `| [${problem}](${url}) |`;
+  const topicTableHeader = `\n${topicHeader}\n| Problem Name | Difficulty |\n| ------- | ------- |\n`;
+  const newRow = `| [${problem}](${url}) | ${difficulty} |`;
 
   // Check if the LeetCode Section exists, or add it
   let leetCodeSectionStartIndex = markdownFile.indexOf(leetCodeSectionStart);
@@ -133,7 +144,9 @@ function sortTopicsInReadme(markdownFile) {
     });
 
     // Reconstruct the topic
-    return ['## ' + topic].concat('|  |', '| ------- |', lines).join('\n');
+    return ['## ' + topic]
+      .concat('| Problem Name | Difficulty |', '| ------- | ------- |', lines)
+      .join('\n');
   });
 
   // Reconstruct the file

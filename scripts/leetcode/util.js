@@ -119,6 +119,66 @@ function getDifficulty(difficulty) {
 }
 
 /**
+ * Derives the problem directory path from the two folder settings. Matches 3.0's real
+ * fixed-precedence logic (language wins over difficulty when both are on - difficulty
+ * nests inside language, not the reverse) plus this fork's own LeetCode/GFG top-level
+ * separation, which is always prefixed regardless of the difficulty toggle - a deliberate
+ * addition on top of 3.0, not something 3.0 itself does.
+ *
+ * @param {string} problemSlug - e.g. "0001-two-sum"
+ * @param {string} difficulty - PascalCase difficulty, e.g. "Easy" (from getDifficulty())
+ * @param {string} languageName - the submission's verbose language name, e.g. "Python3".
+ *   Must come from the platform's own language field (LeetCodeV2's `lang.verboseName`, or the
+ *   equivalent DOM-sourced name on LeetCodeV1) - never reverse-derived from a file extension,
+ *   since `languages` maps name -> extension and multiple names collide on the same extension
+ *   (e.g. Pandas and Python3 both -> .py).
+ * @param {{folderDifficulty: boolean, folderLanguage: boolean}} settings
+ * @returns {string} the problem directory path, e.g. "LeetCode/Python3/Easy/0001-two-sum"
+ */
+function buildProblemPath(problemSlug, difficulty, languageName, settings) {
+  const { folderDifficulty, folderLanguage } = settings;
+  const parts = ['LeetCode'];
+  if (folderLanguage) {
+    parts.push(languageName);
+    if (folderDifficulty) parts.push(difficulty);
+  } else if (folderDifficulty) {
+    parts.push(difficulty);
+  }
+  parts.push(problemSlug);
+  return parts.join('/');
+}
+
+/**
+ * Substitutes {varName} placeholders in a custom commit message template. Unknown keys are
+ * left as literal text rather than stripped or erroring - matches 3.0's real behavior.
+ * @param {string} template
+ * @param {Object} context - e.g. { date, problemName, problemTopic, difficulty, language, time, space }
+ * @returns {string}
+ */
+function parseCustomCommitMessage(template, context) {
+  return template.replace(/{(\w+)}/g, (match, key) =>
+    Object.hasOwn(context, key) ? context[key] : match
+  );
+}
+
+/** Returns today's date as MM-DD-YYYY. */
+function getTodaysDate() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${mm}-${dd}-${d.getFullYear()}`;
+}
+
+/** Returns a filename-safe timestamp: MM-DD-YYYY-hh-mm-ss. */
+function getTimestamp() {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${getTodaysDate()}-${hh}-${min}-${ss}`;
+}
+
+/**
  * Checks if an HTML Collection exists and has elements
  * @param {HTMLCollectionOf<Element>} elem
  * @returns
@@ -207,9 +267,158 @@ function mergeStats(obj1, obj2) {
   return merged;
 }
 
+/** Fetches one GitHub Contents API entry. Returns the directory listing array for a folder,
+ * or the decoded (base64) text content for a file. */
+const fetchRepoContent = async (hook, token, path) => {
+  const res = await fetch(`https://api.github.com/repos/${hook}/contents/${path}`, {
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return data.type === 'dir' || Array.isArray(data) ? data : atob(data.content);
+};
+
+/**
+ * Reconciles local stats against the real repo state - 3.0's actual mechanism (not a
+ * separate stats.json cache, not hash-based). Recursively walks the linked repo via the
+ * Contents API and parses the difficulty out of every per-problem README.md's
+ * `<h3>{difficulty}</h3>` tag. Shared between popup.js (auto, on every popup open) and
+ * welcome.js (auto on link, plus the manual "Sync Problem Counts" link) so both surfaces
+ * stay in sync without duplicating the walk logic.
+ */
+async function syncCountsFromRepo() {
+  const api = getBrowser();
+  const { leethub_hook, leethub_token } = await api.storage.local.get([
+    'leethub_hook',
+    'leethub_token',
+  ]);
+  if (!leethub_hook || !leethub_token) return null;
+
+  const stats = { solved: 0, easy: 0, medium: 0, hard: 0 };
+
+  const walk = async contents => {
+    for (const item of contents) {
+      try {
+        if (item.name.toLowerCase() === 'readme.md' && item.path !== 'README.md') {
+          const content = await fetchRepoContent(leethub_hook, leethub_token, item.path);
+          const difficulty = content.split('<h3>')[1]?.split('</h3>')[0]?.trim().toLowerCase();
+          if (difficulty === 'easy' || difficulty === 'medium' || difficulty === 'hard') {
+            stats[difficulty] += 1;
+            stats.solved += 1;
+          }
+        } else if (item.type === 'dir') {
+          await walk(await fetchRepoContent(leethub_hook, leethub_token, item.path));
+        }
+      } catch (err) {
+        console.error(`LeetHub: failed to process ${item.path}`, err);
+      }
+    }
+  };
+
+  try {
+    await walk(await fetchRepoContent(leethub_hook, leethub_token, ''));
+  } catch (err) {
+    console.error('LeetHub: failed to sync counts from repo', err);
+    return null;
+  }
+
+  // Keep the existing sha cache - only the difficulty counts are being reconciled.
+  const { stats: existing } = await api.storage.local.get('stats');
+  stats.shas = existing?.shas ?? {};
+
+  await api.storage.local.set({ stats });
+  return stats;
+}
+
+const CONFIG_FILENAME = 'config.json';
+/** Every setting stored per-repo in config.json - the folder/timestamp/solution-post
+ * toggles and the commit-message template. Not `leethub_token`/`leethub_hook` themselves -
+ * those are per-browser auth state, not per-repo config. */
+const SETTINGS_KEYS = [
+  'leethub_use_difficulty_folder',
+  'leethub_use_language_folder',
+  'leethub_use_timestamp_filename',
+  'leethub_auto_commit_solution_post',
+  'leethub_custom_commit_message',
+];
+
+/** Reads config.json from the linked repo. Returns { config, sha }, or null if it doesn't
+ * exist yet or the request fails. */
+async function getRepoConfig(hook, token) {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${hook}/contents/${CONFIG_FILENAME}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return { config: JSON.parse(atob(data.content)), sha: data.sha };
+  } catch (err) {
+    console.error('LeetHub: failed to read config.json', err);
+    return null;
+  }
+}
+
+/** Creates or updates config.json in the linked repo (pass the existing sha to update). */
+async function putRepoConfig(hook, token, config, sha) {
+  try {
+    await fetch(`https://api.github.com/repos/${hook}/contents/${CONFIG_FILENAME}`, {
+      method: 'PUT',
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+      body: JSON.stringify({
+        message: sha ? 'Update LeetHub config' : 'Create LeetHub config',
+        content: btoa(unescape(encodeURIComponent(JSON.stringify(config, null, 2)))),
+        sha,
+      }),
+    });
+  } catch (err) {
+    console.error('LeetHub: failed to write config.json', err);
+  }
+}
+
+/**
+ * Pulls config.json into local storage on popup/welcome open, so settings configured from
+ * one browser/profile carry over to another linked to the same repo. Creates the file from
+ * the current local settings if it doesn't exist yet (first time this repo sees LeetHub).
+ * The repo is treated as the source of truth on load - see pushConfigToRepo for the reverse
+ * direction (local change -> repo).
+ */
+async function syncConfigFromRepo() {
+  const api = getBrowser();
+  const { leethub_hook, leethub_token } = await api.storage.local.get([
+    'leethub_hook',
+    'leethub_token',
+  ]);
+  if (!leethub_hook || !leethub_token) return;
+
+  const existing = await getRepoConfig(leethub_hook, leethub_token);
+  if (existing) {
+    await api.storage.local.set(existing.config);
+    return;
+  }
+
+  const local = await api.storage.local.get(SETTINGS_KEYS);
+  await putRepoConfig(leethub_hook, leethub_token, local);
+}
+
+/** Pushes the current local settings to config.json in the repo - call after any settings
+ * change so the repo stays the up to date source of truth. */
+async function pushConfigToRepo() {
+  const api = getBrowser();
+  const { leethub_hook, leethub_token } = await api.storage.local.get([
+    'leethub_hook',
+    'leethub_token',
+  ]);
+  if (!leethub_hook || !leethub_token) return;
+
+  const existing = await getRepoConfig(leethub_hook, leethub_token);
+  const local = await api.storage.local.get(SETTINGS_KEYS);
+  await putRepoConfig(leethub_hook, leethub_token, local, existing?.sha);
+}
+
 export {
   addLeadingZeros,
   assert,
+  buildProblemPath,
   checkElem,
   convertToSlug,
   debounce,
@@ -218,8 +427,14 @@ export {
   formatStats,
   getBrowser,
   getDifficulty,
+  getTimestamp,
+  getTodaysDate,
   isEmptyObject,
   languages,
   LeetHubError,
   mergeStats,
+  parseCustomCommitMessage,
+  pushConfigToRepo,
+  syncConfigFromRepo,
+  syncCountsFromRepo,
 };
