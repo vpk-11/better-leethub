@@ -281,14 +281,14 @@ const fetchRepoContent = async (hook, token, path) => {
 /**
  * Recursively walks the linked repo via the Contents API and parses the difficulty out of
  * every per-problem README.md's `<h3>{difficulty}</h3>` tag - the expensive path (one
- * network request per problem). Only ever called once per repo (see syncStatsFromRepo
- * below) or on an explicit manual re-sync - NOT on every popup open. Doing that was the
- * actual bug: for a repo with 100+ solved problems it fires 100+ sequential GitHub API
- * calls, which reliably trips GitHub's secondary rate limit and silently produces
- * incomplete/wrong counts.
+ * network request per problem). Only ever called once, when a repo is first linked (see
+ * provisionRepoFiles below) or on an explicit manual re-sync - never on a routine popup
+ * open. Doing that was an actual bug: for a repo with 100+ solved problems it fires 100+
+ * sequential GitHub API calls, which reliably trips GitHub's secondary rate limit and
+ * silently produces incomplete/wrong counts.
  */
 async function computeStatsFromReadmes(hook, token) {
-  const stats = { solved: 0, easy: 0, medium: 0, hard: 0 };
+  const counts = { easy: 0, medium: 0, hard: 0 };
 
   const walk = async contents => {
     for (const item of contents) {
@@ -297,8 +297,7 @@ async function computeStatsFromReadmes(hook, token) {
           const content = await fetchRepoContent(hook, token, item.path);
           const difficulty = content.split('<h3>')[1]?.split('</h3>')[0]?.trim().toLowerCase();
           if (difficulty === 'easy' || difficulty === 'medium' || difficulty === 'hard') {
-            stats[difficulty] += 1;
-            stats.solved += 1;
+            counts[difficulty] += 1;
           }
         } else if (item.type === 'dir') {
           await walk(await fetchRepoContent(hook, token, item.path));
@@ -310,13 +309,16 @@ async function computeStatsFromReadmes(hook, token) {
   };
 
   await walk(await fetchRepoContent(hook, token, ''));
-  return stats;
+  return counts;
 }
 
 const STATS_FILENAME = 'stats.json';
 
-/** Reads stats.json from the linked repo. Returns { stats, sha }, or null if it doesn't
- * exist yet or the request fails. */
+/** Reads stats.json from the linked repo. File shape is exactly
+ * `{ "easy": "0", "medium": "0", "hard": "0" }` - string values, no "solved" key (that's
+ * always just easy+medium+hard, computed where needed, never stored). Returns
+ * `{ counts: {easy,medium,hard} }` (numbers) and the sha, or null if it doesn't exist yet or
+ * the request fails. */
 async function getRepoStats(hook, token) {
   try {
     const res = await fetch(`https://api.github.com/repos/${hook}/contents/${STATS_FILENAME}`, {
@@ -324,22 +326,36 @@ async function getRepoStats(hook, token) {
     });
     if (!res.ok) return null;
     const data = await res.json();
-    return { stats: JSON.parse(atob(data.content)), sha: data.sha };
+    const raw = JSON.parse(atob(data.content));
+    return {
+      counts: {
+        easy: Number(raw.easy) || 0,
+        medium: Number(raw.medium) || 0,
+        hard: Number(raw.hard) || 0,
+      },
+      sha: data.sha,
+    };
   } catch (err) {
     console.error('LeetHub: failed to read stats.json', err);
     return null;
   }
 }
 
-/** Creates or updates stats.json in the linked repo (pass the existing sha to update). */
-async function putRepoStats(hook, token, stats, sha) {
+/** Creates or updates stats.json in the linked repo (pass the existing sha to update).
+ * Writes exactly `{ easy, medium, hard }` as strings - nothing else. */
+async function putRepoStats(hook, token, counts, sha) {
   try {
+    const content = {
+      easy: String(counts.easy),
+      medium: String(counts.medium),
+      hard: String(counts.hard),
+    };
     await fetch(`https://api.github.com/repos/${hook}/contents/${STATS_FILENAME}`, {
       method: 'PUT',
       headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
       body: JSON.stringify({
         message: sha ? 'Update LeetHub stats' : 'Create LeetHub stats',
-        content: btoa(unescape(encodeURIComponent(JSON.stringify(stats, null, 2)))),
+        content: btoa(unescape(encodeURIComponent(JSON.stringify(content, null, 2)))),
         sha,
       }),
     });
@@ -348,21 +364,24 @@ async function putRepoStats(hook, token, stats, sha) {
   }
 }
 
-/** Saves { solved, easy, medium, hard } into local storage.stats, keeping the existing sha
- * cache (upload-dedup bookkeeping, local-only, never mirrored to stats.json). */
+/** Saves { easy, medium, hard } into local storage.stats (deriving `solved` as their sum),
+ * keeping the existing sha cache (upload-dedup bookkeeping, local-only, never mirrored to
+ * stats.json). */
 async function saveLocalStats(counts) {
   const api = getBrowser();
   const { stats: existing } = await api.storage.local.get('stats');
-  const stats = { ...counts, shas: existing?.shas ?? {} };
+  const solved = counts.easy + counts.medium + counts.hard;
+  const stats = { ...counts, solved, shas: existing?.shas ?? {} };
   await api.storage.local.set({ stats });
   return stats;
 }
 
 /**
- * Fast path, called on every popup open: pulls stats.json straight from the repo (one API
- * call) into local storage. If it doesn't exist yet - a brand new repo, or an existing one
- * with problems solved before this feature existed - computes it once via the expensive
- * README walk and writes it, so every later call just pulls the cached file.
+ * Pure read, called on every popup open: pulls stats.json straight from the repo (one API
+ * call) into local storage. Never falls back to computing it - by the time a popup can open,
+ * stats.json is guaranteed to already exist (provisionRepoFiles runs at repo-link time, not
+ * lazily here), so there is nothing to fall back to and no reason to risk ever triggering
+ * the expensive README walk from this path.
  */
 async function syncStatsFromRepo() {
   const api = getBrowser();
@@ -373,23 +392,13 @@ async function syncStatsFromRepo() {
   if (!leethub_hook || !leethub_token) return null;
 
   const existing = await getRepoStats(leethub_hook, leethub_token);
-  if (existing) {
-    return saveLocalStats(existing.stats);
-  }
-
-  try {
-    const counts = await computeStatsFromReadmes(leethub_hook, leethub_token);
-    await putRepoStats(leethub_hook, leethub_token, counts);
-    return saveLocalStats(counts);
-  } catch (err) {
-    console.error('LeetHub: failed to compute stats.json', err);
-    return null;
-  }
+  return existing ? saveLocalStats(existing.counts) : null;
 }
 
-/** Forces a full README re-walk regardless of whether stats.json already exists, and
- * overwrites it - for the manual "Sync Problem Counts" link, when the cached file has
- * drifted from the repo's real state (e.g. problems added/removed outside the extension). */
+/** Forces a full README re-walk and overwrites stats.json - used both to provision a repo
+ * the moment it's linked (see provisionRepoFiles) and by the manual "Sync Problem Counts"
+ * link, when the cached file has drifted from the repo's real state (e.g. problems
+ * added/removed outside the extension). */
 async function recomputeStatsFromRepo() {
   const api = getBrowser();
   const { leethub_hook, leethub_token } = await api.storage.local.get([
@@ -424,10 +433,10 @@ async function pushStatsToRepo() {
 
   const { stats } = await api.storage.local.get('stats');
   if (!stats) return;
-  const { solved, easy, medium, hard } = stats;
+  const { easy, medium, hard } = stats;
 
   const existing = await getRepoStats(leethub_hook, leethub_token);
-  await putRepoStats(leethub_hook, leethub_token, { solved, easy, medium, hard }, existing?.sha);
+  await putRepoStats(leethub_hook, leethub_token, { easy, medium, hard }, existing?.sha);
 }
 
 const CONFIG_FILENAME = 'config.json';
@@ -500,6 +509,20 @@ async function syncConfigFromRepo() {
   await putRepoConfig(leethub_hook, leethub_token, local);
 }
 
+/**
+ * Builds config.json and stats.json the moment a repo is linked/created, not lazily on the
+ * next popup open - so both files are guaranteed to already exist by the time anything reads
+ * them, and a routine popup open never needs to fall back to computing anything. config.json:
+ * check-or-create (syncConfigFromRepo - if the repo already has one from a previous link,
+ * pull it instead of clobbering it). stats.json: no check, always a full README sweep
+ * (recomputeStatsFromRepo) - an empty/fresh repo just sweeps to all zeros, same as 3.0's own
+ * default behavior.
+ */
+async function provisionRepoFiles() {
+  const [stats] = await Promise.all([recomputeStatsFromRepo(), syncConfigFromRepo()]);
+  return stats;
+}
+
 /** Pushes the current local settings to config.json in the repo - call after any settings
  * change so the repo stays the up to date source of truth. */
 async function pushConfigToRepo() {
@@ -536,6 +559,7 @@ export {
   parseCustomCommitMessage,
   pushConfigToRepo,
   syncConfigFromRepo,
+  provisionRepoFiles,
   pushStatsToRepo,
   recomputeStatsFromRepo,
   syncStatsFromRepo,

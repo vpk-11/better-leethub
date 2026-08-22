@@ -1,8 +1,8 @@
-import { getBrowser, recomputeStatsFromRepo, syncStatsFromRepo } from './leetcode/util.js';
+import { getBrowser, provisionRepoFiles, recomputeStatsFromRepo } from './leetcode/util.js';
 
 const api = getBrowser();
 
-/** Renders the reconciled stats returned by syncStatsFromRepo/recomputeStatsFromRepo. */
+/** Renders the reconciled stats returned by provisionRepoFiles/recomputeStatsFromRepo. */
 const renderStats = stats => {
   if (!stats) return;
   $('#p_solved').text(stats.solved);
@@ -73,7 +73,7 @@ const createRepo = async (token, name) => {
   res = await res.json();
 
   /* Set Repo Hook, and set mode type to commit */
-  api.storage.local.set({ mode_type: 'commit', leethub_hook: res.full_name });
+  await api.storage.local.set({ mode_type: 'commit', leethub_hook: res.full_name });
   await api.storage.local.remove('stats');
   $('#error').hide();
   $('#success').html(
@@ -84,6 +84,9 @@ const createRepo = async (token, name) => {
   /* Show new layout */
   document.getElementById('hook_mode').style.display = 'none';
   document.getElementById('commit_mode').style.display = 'inherit';
+  // Build config.json/stats.json now, not lazily on next popup open - guarantees both
+  // exist (a fresh repo's stats.json is just a full sweep of nothing, all zeros).
+  provisionRepoFiles().then(renderStats);
 };
 
 const getLinkErrorString = (statusCode, name) => {
@@ -144,9 +147,11 @@ const linkRepo = (token, name) => {
         $('#success').show();
         $('#unlink').show();
         console.log('Successfully set new repo hook');
+        // Build config.json/stats.json now that leethub_hook is actually persisted, not
+        // lazily on next popup open - guarantees both exist by the time anything reads them.
+        provisionRepoFiles().then(renderStats);
       }
     );
-    syncStatsFromRepo().then(renderStats);
 
     /* Hide accordingly */
     document.getElementById('hook_mode').style.display = 'none';
