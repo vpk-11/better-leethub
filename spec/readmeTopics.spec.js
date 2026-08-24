@@ -1,17 +1,57 @@
-
 import { appendProblemToReadme, sortTopicsInReadme } from '../scripts/leetcode/readmeTopics.js';
+
+describe('sortTopicsInReadme', () => {
+  it('sorts problems within a topic table ascending by problem number', () => {
+    const markdown = [
+      '\x3C!---LeetCode Topics Start-->',
+      '# LeetCode Topics',
+      '',
+      '## Array',
+      '| Problem Name | Difficulty |',
+      '| ------- | ------- |',
+      '| [0021-merge-two-sorted-lists](https://github.com/any/tree/main/LeetCode/0021-merge-two-sorted-lists) | Easy |',
+      '| [0001-two-sum](https://github.com/any/tree/main/LeetCode/0001-two-sum) | Easy |',
+      '',
+      '\x3C!---LeetCode Topics End-->',
+    ].join('\n');
+
+    const output = sortTopicsInReadme(markdown);
+    const indexOf0001 = output.indexOf('0001-two-sum');
+    const indexOf0021 = output.indexOf('0021-merge-two-sorted-lists');
+    expect(indexOf0001).toBeGreaterThan(-1);
+    expect(indexOf0021).toBeGreaterThan(-1);
+    expect(indexOf0001).toBeLessThan(indexOf0021);
+  });
+});
 
 describe('appendProblemToReadme', () => {
   it('should correctly append to previous readme which has start and end tags', () => {
-    const sampleText = '# LeetCode Topics\n### Extra Hard questions\nThese are notes I want for extra hard problems\n\n# About me\nThis a repo I had that I wished to do xyz with\n\n\x3C!---LeetCode Topics Start-->\n# LeetCode Topics\n\n## Hash Table\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0020-fake-problem](https://github.com/any/tree/main/LeetCode/0020-fake-problem) | Easy |\n\n\x3C!---LeetCode Topics End-->'
-    const output = appendProblemToReadme('Hash Table', sampleText, 'any', '0013-roman-to-integer', 'LeetCode/0013-roman-to-integer', 'Medium');
-    const expected = '# LeetCode Topics\n### Extra Hard questions\nThese are notes I want for extra hard problems\n\n# About me\nThis a repo I had that I wished to do xyz with\n\n\x3C!---LeetCode Topics Start-->\n# LeetCode Topics\n\n## Hash Table\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0020-fake-problem](https://github.com/any/tree/main/LeetCode/0020-fake-problem) | Easy |\n| [0013-roman-to-integer](https://github.com/any/tree/main/LeetCode/0013-roman-to-integer) | Medium |\n\n\n\n\x3C!---LeetCode Topics End-->'
-    expect(output).toBe(expected)
-  })
+    const sampleText =
+      '# LeetCode Topics\n### Extra Hard questions\nThese are notes I want for extra hard problems\n\n# About me\nThis a repo I had that I wished to do xyz with\n\n\x3C!---LeetCode Topics Start-->\n# LeetCode Topics\n\n## Hash Table\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0020-fake-problem](https://github.com/any/tree/main/LeetCode/0020-fake-problem) | Easy |\n\n\x3C!---LeetCode Topics End-->';
+    const output = appendProblemToReadme(
+      'Hash Table',
+      sampleText,
+      'any',
+      '0013-roman-to-integer',
+      'LeetCode/0013-roman-to-integer',
+      'Medium'
+    );
+    const expected =
+      '# LeetCode Topics\n### Extra Hard questions\nThese are notes I want for extra hard problems\n\n# About me\nThis a repo I had that I wished to do xyz with\n\n\x3C!---LeetCode Topics Start-->\n# LeetCode Topics\n\n## Hash Table\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0020-fake-problem](https://github.com/any/tree/main/LeetCode/0020-fake-problem) | Easy |\n| [0013-roman-to-integer](https://github.com/any/tree/main/LeetCode/0013-roman-to-integer) | Medium |\n\n\n\n\x3C!---LeetCode Topics End-->';
+    expect(output).toBe(expected);
+  });
 
   it('should not append duplicate problem', () => {
-    const sampleText = 'A collection of LeetCode questions to ace the coding interview! - Created using [LeetHub](https://github.com/vpk-11/LeetHub-2.0)\n# LeetCode Topics\n## Math\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0002-add-two-numbers](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0002-add-two-numbers) | Medium |\n| [0009-palindrome-number](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0009-palindrome-number) | Easy |\n## Array\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0001-two-sum](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0001-two-sum) | Easy |\n## Hash Table\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0001-two-sum](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0001-two-sum) | Easy |\n| [0003-longest-substring-without-repeating-characters](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0003-longest-substring-without-repeating-characters) | Medium |\n## Linked List\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0002-add-two-numbers](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0002-add-two-numbers) | Medium |\n## Recursion\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0002-add-two-numbers](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0002-add-two-numbers) | Medium |\n## String\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0003-longest-substring-without-repeating-characters](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0003-longest-substring-without-repeating-characters) | Medium |\n## Sliding Window\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0003-longest-substring-without-repeating-characters](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0003-longest-substring-without-repeating-characters) | Medium |\n\n### Extra Hard questions\nThese are notes I want for extra hard problems\n\n# About me\nThis a repo I had that I wished to do xyz with\n\n\x3C!---LeetCode Topics Start-->\n# LeetCode Topics\n\n## Hash Table\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0013-roman-to-integer](https://github.com/any/tree/main/LeetCode/0013-roman-to-integer) | Medium |\n| [0002-fake-problem](https://github.com/any/tree/main/LeetCode/0002-fake-problem) | Easy |\n| [0012-fake-problem](https://github.com/any/tree/main/LeetCode/0012-fake-problem) | Easy |\n| [0009-fake-problem](https://github.com/any/tree/main/LeetCode/0009-fake-problem) | Easy |\n| [0090-fake-problem](https://github.com/any/tree/main/LeetCode/0090-fake-problem) | Easy |\n| [0020-fake-problem](https://github.com/any/tree/main/LeetCode/0020-fake-problem) | Easy |\n\n\x3C!---LeetCode Topics End-->'
-    const output = appendProblemToReadme('Hash Table', sampleText, 'any', '0013-roman-to-integer', 'LeetCode/0013-roman-to-integer', 'Medium');
-    expect(output).toBe(sampleText)
-  })
-})
+    const sampleText =
+      'A collection of LeetCode questions to ace the coding interview! - Created using [LeetHub](https://github.com/vpk-11/LeetHub-2.0)\n# LeetCode Topics\n## Math\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0002-add-two-numbers](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0002-add-two-numbers) | Medium |\n| [0009-palindrome-number](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0009-palindrome-number) | Easy |\n## Array\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0001-two-sum](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0001-two-sum) | Easy |\n## Hash Table\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0001-two-sum](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0001-two-sum) | Easy |\n| [0003-longest-substring-without-repeating-characters](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0003-longest-substring-without-repeating-characters) | Medium |\n## Linked List\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0002-add-two-numbers](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0002-add-two-numbers) | Medium |\n## Recursion\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0002-add-two-numbers](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0002-add-two-numbers) | Medium |\n## String\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0003-longest-substring-without-repeating-characters](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0003-longest-substring-without-repeating-characters) | Medium |\n## Sliding Window\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0003-longest-substring-without-repeating-characters](https://github.com/vpk-11/LeetHub-2.0/tree/main/LeetCode/0003-longest-substring-without-repeating-characters) | Medium |\n\n### Extra Hard questions\nThese are notes I want for extra hard problems\n\n# About me\nThis a repo I had that I wished to do xyz with\n\n\x3C!---LeetCode Topics Start-->\n# LeetCode Topics\n\n## Hash Table\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0013-roman-to-integer](https://github.com/any/tree/main/LeetCode/0013-roman-to-integer) | Medium |\n| [0002-fake-problem](https://github.com/any/tree/main/LeetCode/0002-fake-problem) | Easy |\n| [0012-fake-problem](https://github.com/any/tree/main/LeetCode/0012-fake-problem) | Easy |\n| [0009-fake-problem](https://github.com/any/tree/main/LeetCode/0009-fake-problem) | Easy |\n| [0090-fake-problem](https://github.com/any/tree/main/LeetCode/0090-fake-problem) | Easy |\n| [0020-fake-problem](https://github.com/any/tree/main/LeetCode/0020-fake-problem) | Easy |\n\n\x3C!---LeetCode Topics End-->';
+    const output = appendProblemToReadme(
+      'Hash Table',
+      sampleText,
+      'any',
+      '0013-roman-to-integer',
+      'LeetCode/0013-roman-to-integer',
+      'Medium'
+    );
+    expect(output).toBe(sampleText);
+  });
+});
