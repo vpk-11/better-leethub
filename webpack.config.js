@@ -20,6 +20,7 @@ const ignore = [
   '**/.env',
   '**/assets/.DS_Store',
   '**/package*',
+  '**/pnpm-lock.yaml',
   '**/webpack*',
   '**/README.md',
   '**/assets/extension', // web store assets
