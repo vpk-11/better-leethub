@@ -218,60 +218,27 @@ function formatStats(time, timePercentile, space, spacePercentile) {
   return `Time: ${time} (${timePercentile}%), Space: ${space} (${spacePercentile}%) - LeetHub`;
 }
 
-function isObject(obj) {
-  return obj && typeof obj === 'object' && !Array.isArray(obj);
+/** Standard GitHub REST API auth headers - shared by every fetch call in this codebase so
+ * the header shape lives in exactly one place. */
+function githubHeaders(token) {
+  return { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' };
 }
 
-function mergeDeep(target, source) {
-  for (const key in source) {
-    if (isObject(source[key])) {
-      if (!target[key]) {
-        Object.assign(target, { [key]: {} });
-      }
-      mergeDeep(target[key], source[key]);
-    } else {
-      Object.assign(target, { [key]: source[key] });
-    }
-  }
-}
-
-function mergeStats(obj1, obj2) {
-  function countDifficulties(shas) {
-    const difficulties = { easy: 0, medium: 0, hard: 0, solved: 0 };
-    for (const problem in shas) {
-      if ('difficulty' in shas[problem]) {
-        const difficulty = shas[problem].difficulty;
-        if (difficulty in difficulties) {
-          difficulties[difficulty]++;
-        }
-      }
-    }
-    for (let value of Object.values(difficulties)) {
-      difficulties.solved += value;
-    }
-    return difficulties;
-  }
-
-  const merged = {};
-  mergeDeep(merged, obj1);
-  mergeDeep(merged, obj2);
-
-  const shas = merged.shas || {};
-  const difficulties = countDifficulties(shas);
-
-  merged.easy = difficulties.easy;
-  merged.medium = difficulties.medium;
-  merged.hard = difficulties.hard;
-  merged.solved = difficulties.solved;
-
-  return merged;
+/** Escapes a string for safe interpolation into an HTML string (e.g. jQuery `.html()`). */
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /** Fetches one GitHub Contents API entry. Returns the directory listing array for a folder,
  * or the decoded (base64) text content for a file. */
 const fetchRepoContent = async (hook, token, path) => {
   const res = await fetch(`https://api.github.com/repos/${hook}/contents/${path}`, {
-    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+    headers: githubHeaders(token),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
@@ -292,7 +259,7 @@ async function computeStatsFromReadmes(hook, token) {
 
   try {
     const res = await fetch(`https://api.github.com/repos/${hook}/git/trees/HEAD?recursive=1`, {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+      headers: githubHeaders(token),
     });
 
     if (!res.ok) return counts;
@@ -344,7 +311,7 @@ async function putRepoFile(hook, token, filename, content, message, sha) {
 
   const res = await fetch(`https://api.github.com/repos/${hook}/contents/${filename}`, {
     method: 'PUT',
-    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+    headers: githubHeaders(token),
     body: JSON.stringify(bodyData),
   });
 
@@ -371,7 +338,7 @@ const README_FILENAME = 'README.md';
  * message sits right below the header, inside the section - appendProblemToReadme appends
  * topic tables after whatever's already in the section, so this stays above every table. */
 const DEFAULT_REPO_README =
-  '<!---LeetCode Topics Start-->\n# LeetCode Topics\nThis repository is synced with [LeetHub](https://github.com/vpk-11/LeetHub-2.0).\n<!---LeetCode Topics End-->';
+  '<!---LeetCode Topics Start-->\n# LeetCode Topics\nThis repository is synced with [LeetHub](https://github.com/vpk-11/LeetHub).\n<!---LeetCode Topics End-->';
 
 /** Reads stats.json from the linked repo. File shape is exactly
  * `{ "easy": "0", "medium": "0", "hard": "0" }` - string values, no "solved" key (that's
@@ -381,7 +348,7 @@ const DEFAULT_REPO_README =
 async function getRepoStats(hook, token) {
   try {
     const res = await fetch(`https://api.github.com/repos/${hook}/contents/${STATS_FILENAME}`, {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+      headers: githubHeaders(token),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -534,7 +501,7 @@ const SETTINGS_KEYS = [
 async function getRepoConfig(hook, token) {
   try {
     const res = await fetch(`https://api.github.com/repos/${hook}/contents/${CONFIG_FILENAME}`, {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+      headers: githubHeaders(token),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -594,7 +561,7 @@ async function syncConfigFromRepo() {
 
 async function ensureRepoReadme(hook, token) {
   const existing = await fetch(`https://api.github.com/repos/${hook}/contents/${README_FILENAME}`, {
-    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+    headers: githubHeaders(token),
   });
 
   if (existing.ok) return;
@@ -669,10 +636,7 @@ async function archiveAndResetStats() {
   ]);
   if (!leethub_hook || !leethub_token) return null;
 
-  const headers = {
-    Authorization: `token ${leethub_token}`,
-    Accept: 'application/vnd.github.v3+json',
-  };
+  const headers = githubHeaders(leethub_token);
 
   // 1. Full current tree - also gives us the base tree sha the patch below is built against.
   const treeRes = await fetch(
@@ -800,17 +764,19 @@ export {
   checkElem,
   convertToSlug,
   debounce,
+  DEFAULT_REPO_README,
   delay,
   DIFFICULTY,
+  escapeHtml,
   formatStats,
   getBrowser,
   getDifficulty,
+  githubHeaders,
   getTimestamp,
   getTodaysDate,
   isEmptyObject,
   languages,
   LeetHubError,
-  mergeStats,
   parseCustomCommitMessage,
   pushConfigToRepo,
   syncConfigFromRepo,

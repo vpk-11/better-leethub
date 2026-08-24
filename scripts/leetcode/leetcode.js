@@ -4,10 +4,12 @@ import {
   addLeadingZeros,
   buildProblemPath,
   convertToSlug,
+  DEFAULT_REPO_README,
   delay,
   DIFFICULTY,
   getBrowser,
   getDifficulty,
+  githubHeaders,
   getTimestamp,
   getTodaysDate,
   isEmptyObject,
@@ -23,8 +25,6 @@ const updateReadmeMsg = 'Update README - Topic Tags';
 const discussionMsg = 'Prepend discussion post - LeetHub';
 const createNotesMsg = 'Attach NOTES - LeetHub';
 const solutionPostFallbackMsg = 'Add solution post - LeetHub';
-const defaultRepoReadme =
-  '<!---LeetCode Topics Start-->\n# LeetCode Topics\nThis repository is synced with [LeetHub](https://github.com/vpk-11/LeetHub-2.0).\n<!---LeetCode Topics End-->';
 const readmeFilename = 'README.md';
 
 // problem types
@@ -32,6 +32,21 @@ const NORMAL_PROBLEM = 0;
 const EXPLORE_SECTION_PROBLEM = 1;
 
 const WAIT_FOR_GITHUB_API_TO_NOT_THROW_409_MS = 500;
+const POLL_INTERVAL_MS = 1000;
+const MAX_POLL_ATTEMPTS = 10;
+
+/** Default (empty) stats shape - used whenever local storage has no `stats` yet. */
+const DEFAULT_STATS = () => ({ solved: 0, easy: 0, medium: 0, hard: 0, shas: {} });
+
+/** Wraps a failed GitHub API `Response`, carrying its numeric `status` alongside the
+ * message - lets callers branch on `err.status` instead of string-matching `err.message`. */
+class LeetHubNetworkError extends LeetHubError {
+  constructor(response) {
+    super(String(response.status));
+    this.status = response.status;
+    this.statusText = response.statusText;
+  }
+}
 
 const api = getBrowser();
 
@@ -86,16 +101,13 @@ const upload = async (token, hook, content, problem, filename, sha, message) => 
 
   let options = {
     method: 'PUT',
-    headers: {
-      Authorization: `token ${token}`,
-      Accept: 'application/vnd.github.v3+json',
-    },
+    headers: githubHeaders(token),
     body: JSON.stringify(data),
   };
 
   const res = await fetch(URL, options);
   if (!res.ok) {
-    throw new LeetHubError(res.status, { cause: res });
+    throw new LeetHubNetworkError(res);
   }
   console.log(`Successfully committed ${getPath(problem, filename)} to github`);
 
@@ -138,7 +150,7 @@ const incrementStats = (difficulty, problem) => {
   const diff = getDifficulty(difficulty);
   return api.storage.local.get('stats').then(({ stats }) => {
     if (!stats) {
-      stats = { solved: 0, easy: 0, medium: 0, hard: 0, shas: {} };
+      stats = DEFAULT_STATS();
     }
     stats.solved = (stats.solved || 0) + 1;
     stats.easy = (stats.easy || 0) + (diff === DIFFICULTY.EASY ? 1 : 0);
@@ -170,16 +182,11 @@ const isCompleted = async problemPath => {
     try {
       const res = await fetch(
         `https://api.github.com/repos/${leethub_hook}/contents/${problemPath}/README.md`,
-        {
-          headers: {
-            Authorization: `token ${leethub_token}`,
-            Accept: 'application/vnd.github.v3+json',
-          },
-        }
+        { headers: githubHeaders(leethub_token) }
       );
       if (res.ok) {
         const data = await res.json();
-        const existingStats = stats || { solved: 0, easy: 0, medium: 0, hard: 0, shas: {} };
+        const existingStats = stats || DEFAULT_STATS();
         existingStats.shas = existingStats.shas || {};
         existingStats.shas[problemPath] = existingStats.shas[problemPath] || {};
         existingStats.shas[problemPath]['README.md'] = data.sha;
@@ -283,7 +290,7 @@ async function uploadGitWith409Retry(code, problemName, filename, commitMsg, opt
       optionals?.difficulty
     );
   } catch (err) {
-    if (err.message === '409') {
+    if (err.status === 409) {
       const data = await getGitHubFile(token, hook, problemName, filename).then(res => res.json());
       return upload(
         token,
@@ -316,10 +323,7 @@ async function getGitHubFile(token, hook, directory, filename) {
 
   let options = {
     method: 'GET',
-    headers: {
-      Authorization: `token ${token}`,
-      Accept: 'application/vnd.github.v3+json',
-    },
+    headers: githubHeaders(token),
   };
 
   const res = await fetch(URL, options);
@@ -362,7 +366,7 @@ document.addEventListener('click', event => {
 });
 
 function createRepoReadme() {
-  const content = encode(defaultRepoReadme);
+  const content = encode(DEFAULT_REPO_README);
   return uploadGitWith409Retry(content, readmeFilename, '', readmeMsg);
 }
 
@@ -474,12 +478,7 @@ async function getLastCommitMessage(problemName) {
   try {
     const res = await fetch(
       `https://api.github.com/repos/${leethub_hook}/commits?path=${problemName}&per_page=10`,
-      {
-        headers: {
-          Authorization: `token ${leethub_token}`,
-          Accept: 'application/vnd.github.v3+json',
-        },
-      }
+      { headers: githubHeaders(leethub_token) }
     );
     if (res.ok) {
       const commits = await res.json();
@@ -537,9 +536,10 @@ function loader(leetCode, suffix) {
       const isSuccessfulSubmission = leetCode.getSuccessStateAndUpdate();
       if (!isSuccessfulSubmission) {
         iterations++;
-        if (iterations > 9) {
-          // poll for max 10 attempts (10 seconds)
-          throw new LeetHubError('Could not find successful submission after 10 seconds.');
+        if (iterations >= MAX_POLL_ATTEMPTS) {
+          throw new LeetHubError(
+            `Could not find successful submission after ${MAX_POLL_ATTEMPTS} seconds.`
+          );
         }
         return;
       }
@@ -659,7 +659,7 @@ function loader(leetCode, suffix) {
         return;
       }
     }
-  }, 1000);
+  }, POLL_INTERVAL_MS);
 }
 
 /**
@@ -710,33 +710,3 @@ submitBtnObserver.observe(document.body, {
   subtree: true,
 });
 
-/* Sync to local storage */
-api.storage.local.get('isSync', data => {
-  const keys = [
-    'leethub_token',
-    'leethub_username',
-    'pipe_leethub',
-    'stats',
-    'leethub_hook',
-    'mode_type',
-  ];
-  if (!data || !data.isSync) {
-    keys.forEach(key => {
-      api.storage.sync.get(key, data => {
-        api.storage.local.set({ [key]: data[key] });
-      });
-    });
-    api.storage.local.set({ isSync: true }, () => {
-      console.log('LeetHub Synced to local values');
-    });
-  } else {
-    console.log('LeetHub Local storage already synced!');
-  }
-});
-
-class LeetHubNetworkError extends LeetHubError {
-  constructor(response) {
-    super(response.statusText);
-    this.status = response.status;
-  }
-}

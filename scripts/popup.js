@@ -1,4 +1,4 @@
-import { getBrowser } from './leetcode/util.js';
+import { escapeHtml, getBrowser } from './leetcode/util.js';
 
 let api = getBrowser();
 
@@ -134,15 +134,13 @@ api.storage.local.get('leethub_token', data => {
               $('#commit_mode').show();
               /* Get problem stats and repo link */
               api.storage.local.get(['stats', 'leethub_hook'], data3 => {
-                const stats = data3?.stats;
-                $('#p_solved').text(stats?.solved ?? 0);
-                $('#p_solved_easy').text(stats?.easy ?? 0);
-                $('#p_solved_medium').text(stats?.medium ?? 0);
-                $('#p_solved_hard').text(stats?.hard ?? 0);
+                renderStats(data3?.stats);
                 const leethubHook = data3?.leethub_hook;
                 if (leethubHook) {
                   $('#repo_url').html(
-                    `<a target="blank" style="color: cadetblue !important; font-size:0.8em;" href="https://github.com/${leethubHook}">${leethubHook}</a>`
+                    `<a target="blank" style="color: cadetblue !important; font-size:0.8em;" href="https://github.com/${escapeHtml(
+                      leethubHook
+                    )}">${escapeHtml(leethubHook)}</a>`
                   );
                 }
                 // Auto-sync on every popup open (real 3.0's stats mechanism, triggered

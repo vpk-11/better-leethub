@@ -1,6 +1,8 @@
 import {
   archiveAndResetStats,
+  escapeHtml,
   getBrowser,
+  githubHeaders,
   provisionRepoFiles,
   recomputeStatsFromRepo,
   syncConfigFromRepo,
@@ -22,7 +24,7 @@ const renderStats = stats => {
 const validateToken = async token => {
   try {
     const res = await fetch('https://api.github.com/user', {
-      headers: { Authorization: `token ${token}` },
+      headers: githubHeaders(token),
     });
     return res.ok ? res.json() : null;
   } catch (err) {
@@ -35,7 +37,7 @@ const validateToken = async token => {
 const validateRepo = async (token, repoHook) => {
   try {
     const res = await fetch(`https://api.github.com/repos/${repoHook}`, {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+      headers: githubHeaders(token),
     });
     return res.ok ? res.json() : null;
   } catch (err) {
@@ -49,7 +51,9 @@ const showCommitMode = hook => {
   $('#commit_mode').show();
   $('#unlink').show();
   $('#repo_url').html(
-    `<a target="_blank" style="color: aqua !important;" href="https://github.com/${hook}">${hook}</a>`
+    `<a target="_blank" style="color: aqua !important;" href="https://github.com/${escapeHtml(
+      hook
+    )}">${escapeHtml(hook)}</a>`
   );
 };
 
@@ -102,13 +106,15 @@ $('#hook_button').on('click', async () => {
   const username = user.login;
   const fullHook = repoInput.includes('/') ? repoInput : `${username}/${repoInput}`;
 
-  $('#success').html(`Connecting to <strong>${fullHook}</strong>...`).show();
+  $('#success').html(`Connecting to <strong>${escapeHtml(fullHook)}</strong>...`).show();
 
   const repoData = await validateRepo(token, fullHook);
   if (!repoData) {
     $('#error')
       .html(
-        `Unable to access <strong>${fullHook}</strong>. Ensure the repository exists and your PAT has repo access.`
+        `Unable to access <strong>${escapeHtml(
+          fullHook
+        )}</strong>. Ensure the repository exists and your PAT has repo access.`
       )
       .show();
     $('#success').hide();
@@ -128,7 +134,9 @@ $('#hook_button').on('click', async () => {
   $('#error').hide();
   $('#success')
     .html(
-      `Successfully connected <a target="_blank" href="${repoData.html_url}">${fullHook}</a> to LeetHub!`
+      `Successfully connected <a target="_blank" href="${escapeHtml(
+        repoData.html_url
+      )}">${escapeHtml(fullHook)}</a> to LeetHub!`
     )
     .show();
 
