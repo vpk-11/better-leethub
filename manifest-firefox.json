@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LeetHub",
   "description": "Automatically integrate your LeetCode submissions to GitHub",
-  "homepage_url": "https://github.com/vpk-11/LeetHub-2.0",
+  "homepage_url": "https://github.com/vpk-11/LeetHub",
   "version": "__LH_VERSION__",
   "action": {
     "default_icon": "assets/thumbnail.png",

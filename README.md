@@ -10,7 +10,7 @@
 </h1>
 
 <p align="center">
-  <a href="https://github.com/vpk-11/LeetHub-2.0/blob/main/LICENSE">
+  <a href="https://github.com/vpk-11/LeetHub/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license"/>
   </a>
 </p>
@@ -45,27 +45,27 @@
 
 1. Clone this repository to your local machine:
    ```bash
-   git clone https://github.com/vpk-11/LeetHub-2.0.git
+   git clone https://github.com/vpk-11/LeetHub.git
    ```
 2. Install developer dependencies:
    ```bash
-   npm run setup
+   pnpm run setup
    ```
 3. Build the extension:
    ```bash
-   npm run build
+   pnpm run build
    ```
 4. Load the unpacked extension:
    - **Chrome**: Go to `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select `./dist/chrome`.
    - **Firefox**: Go to `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on...**, and select `./dist/firefox/manifest.json`.
 
-### NPM Commands
+### pnpm Commands
 
 ```bash
-npm test              # Run Jasmine test suite
-npm run build         # Build production bundles for Chrome and Firefox
-npm run dev           # Build with watch mode enabled
-npm run format        # Auto-format codebase using Prettier
+pnpm test              # Run Jasmine test suite
+pnpm run build         # Build production bundles for Chrome and Firefox
+pnpm run dev           # Build with watch mode enabled
+pnpm run format        # Auto-format codebase using Prettier
 ```
 
 ## Credits
