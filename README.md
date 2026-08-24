@@ -1,3 +1,6 @@
+<!-- version: v2.0.9 -->
+![Version](https://img.shields.io/badge/version-v2.0.9-blue)
+
 <h1 align="center">
   <img src="assets/octocode.png" alt="LeetHub - Automatically sync your code to GitHub." width="400">
   <br>
@@ -14,7 +17,7 @@
 
 ## What is LeetHub?
 
-<p>A browser extension for Chrome and Firefox that automatically pushes your code to GitHub when you pass all tests on a <a href="https://leetcode.com/">LeetCode</a> or <a href="https://practice.geeksforgeeks.org/">GeeksforGeeks</a> problem. Fast, reliable, and equipped with PAT authentication and custom settings support.</p>
+<p>A browser extension for Chrome and Firefox that automatically pushes your code to GitHub when you pass all tests on a <a href="https://leetcode.com/">LeetCode</a> problem. Fast, reliable, and equipped with PAT authentication and custom settings support.</p>
 
 ## Why LeetHub?
 
@@ -64,3 +67,14 @@ npm run build         # Build production bundles for Chrome and Firefox
 npm run dev           # Build with watch mode enabled
 npm run format        # Auto-format codebase using Prettier
 ```
+
+## Credits
+
+LeetHub builds on two upstream projects:
+
+- [arunbhardwaj/LeetHub-2.0](https://github.com/arunbhardwaj/LeetHub-2.0) - the base codebase this fork's infrastructure (build system, dual Chrome/Firefox manifests) is built on.
+- [raphaelheinz/LeetHub-3.0](https://github.com/raphaelheinz/LeetHub-3.0) - the source for this fork's feature/scraper layer (folder structure, commit templating, submission detection).
+
+## Changelog
+
+<!-- Auto-updated by .github/workflows/version_bump.yml on every push/merge to main. -->
