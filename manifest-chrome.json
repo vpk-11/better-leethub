@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LeetHub",
-  "description": "Automatically integrate your Leetcode & GeeksforGeeks submissions to GitHub",
+  "description": "Automatically integrate your LeetCode submissions to GitHub",
   "homepage_url": "https://github.com/vpk-11/LeetHub-2.0",
   "version": "__LH_VERSION__",
   "action": {
@@ -29,10 +29,6 @@
       "matches": ["https://leetcode.com/*"],
       "js": ["scripts/leetcode.js"],
       "run_at": "document_idle"
-    },
-    {
-      "matches": ["https://practice.geeksforgeeks.org/*"],
-      "js": ["scripts/gfg.js"]
     }
   ],
   "content_security_policy": {

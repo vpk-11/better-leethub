@@ -24,7 +24,7 @@ const discussionMsg = 'Prepend discussion post - LeetHub';
 const createNotesMsg = 'Attach NOTES - LeetHub';
 const solutionPostFallbackMsg = 'Add solution post - LeetHub';
 const defaultRepoReadme =
-  'A collection of LeetCode questions to ace the coding interview! - Created using [LeetHub](https://github.com/vpk-11/LeetHub-2.0)';
+  '<!---LeetCode Topics Start-->\n# LeetCode Topics\nThis repository is synced with [LeetHub](https://github.com/vpk-11/LeetHub-2.0).\n<!---LeetCode Topics End-->';
 const readmeFilename = 'README.md';
 
 // problem types

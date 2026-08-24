@@ -1,4 +1,5 @@
 import {
+  archiveAndResetStats,
   getBrowser,
   provisionRepoFiles,
   recomputeStatsFromRepo,
@@ -170,6 +171,29 @@ $('#sync_counts').on('click', async () => {
   } catch (err) {
     console.error('LeetHub: manual sync_counts error', err);
     $('#sync_status').text(`Failed to sync stats.json: ${err.message}`).css('color', '#d9534f');
+  }
+});
+
+$('#archive_reset').on('click', async () => {
+  const confirmed = confirm(
+    'Move LeetCode/, stats.json, and README.md into a dated Archive/ folder, then start fresh ' +
+      'with a new stats.json and README.md? config.json is left untouched. This cannot be ' +
+      'undone from the extension.'
+  );
+  if (!confirmed) return;
+
+  $('#sync_status')
+    .text('Archiving LeetCode/, stats.json, and README.md...')
+    .css('color', '#bfc0b9');
+  try {
+    const stats = await archiveAndResetStats();
+    renderStats(stats);
+    $('#sync_status')
+      .text('Archived! stats.json and README.md have been reset.')
+      .css('color', '#5cb85c');
+  } catch (err) {
+    console.error('LeetHub: archive-and-reset error', err);
+    $('#sync_status').text(`Failed to archive and reset: ${err.message}`).css('color', '#d9534f');
   }
 });
 

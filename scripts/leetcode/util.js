@@ -121,9 +121,9 @@ function getDifficulty(difficulty) {
 /**
  * Derives the problem directory path from the two folder settings. Matches 3.0's real
  * fixed-precedence logic (language wins over difficulty when both are on - difficulty
- * nests inside language, not the reverse) plus this fork's own LeetCode/GFG top-level
- * separation, which is always prefixed regardless of the difficulty toggle - a deliberate
- * addition on top of 3.0, not something 3.0 itself does.
+ * nests inside language, not the reverse) plus this fork's own always-on LeetCode/
+ * top-level prefix, regardless of the difficulty toggle - a deliberate addition on top
+ * of 3.0, not something 3.0 itself does.
  *
  * @param {string} problemSlug - e.g. "0001-two-sum"
  * @param {string} difficulty - PascalCase difficulty, e.g. "Easy" (from getDifficulty())
@@ -364,8 +364,14 @@ async function putRepoFile(hook, token, filename, content, message, sha) {
 
 const STATS_FILENAME = 'stats.json';
 const README_FILENAME = 'README.md';
+/** Includes the empty LeetCode Topics section up front (same start/header/end tags
+ * appendProblemToReadme in readmeTopics.js looks for) so a fresh repo's README is already in
+ * the shape the topic-append logic expects, rather than relying on that logic's own
+ * add-the-section-if-missing fallback to create it later on the first submission. The sync
+ * message sits right below the header, inside the section - appendProblemToReadme appends
+ * topic tables after whatever's already in the section, so this stays above every table. */
 const DEFAULT_REPO_README =
-  'A collection of LeetCode questions to ace the coding interview! - Created using [LeetHub](https://github.com/vpk-11/LeetHub-2.0)';
+  '<!---LeetCode Topics Start-->\n# LeetCode Topics\nThis repository is synced with [LeetHub](https://github.com/vpk-11/LeetHub-2.0).\n<!---LeetCode Topics End-->';
 
 /** Reads stats.json from the linked repo. File shape is exactly
  * `{ "easy": "0", "medium": "0", "hard": "0" }` - string values, no "solved" key (that's
@@ -643,8 +649,152 @@ async function pushConfigToRepo() {
   await putRepoConfig(leethub_hook, leethub_token, local, existing?.sha);
 }
 
+/**
+ * Archives the current LeetCode/ folder, stats.json, and README.md under a single dated
+ * Archive/{date}/ folder (LeetCode/, stats.json, and README.md all land inside it, in place),
+ * then creates a fresh, all-zero stats.json and a fresh scaffolded README.md at the repo root -
+ * the same two files provisionRepoFiles() creates for a brand-new repo link. config.json is
+ * left untouched. Uses the Git Data API (a tree patch against the current base tree, one
+ * commit, one ref update) instead of per-file copy+delete, so the whole operation is a small
+ * fixed number of API calls regardless of how many problems are being archived - not one call
+ * per file, which would trip GitHub's secondary rate limit on any repo with a meaningful number
+ * of solves. Assumes the repo's default branch is `main`, matching this codebase's existing
+ * convention elsewhere (the topics-README problem links are already hardcoded to `tree/main`).
+ */
+async function archiveAndResetStats() {
+  const api = getBrowser();
+  const { leethub_hook, leethub_token } = await api.storage.local.get([
+    'leethub_hook',
+    'leethub_token',
+  ]);
+  if (!leethub_hook || !leethub_token) return null;
+
+  const headers = {
+    Authorization: `token ${leethub_token}`,
+    Accept: 'application/vnd.github.v3+json',
+  };
+
+  // 1. Full current tree - also gives us the base tree sha the patch below is built against.
+  const treeRes = await fetch(
+    `https://api.github.com/repos/${leethub_hook}/git/trees/HEAD?recursive=1`,
+    { headers }
+  );
+  if (!treeRes.ok) throw new Error(`Failed to read repo tree: HTTP ${treeRes.status}`);
+  const treeData = await treeRes.json();
+  const tree = treeData?.tree ?? [];
+  const baseTreeSha = treeData.sha;
+
+  // 2. Current branch head commit - the new commit's parent.
+  const refRes = await fetch(`https://api.github.com/repos/${leethub_hook}/git/refs/heads/main`, {
+    headers,
+  });
+  if (!refRes.ok) throw new Error(`Failed to read branch ref: HTTP ${refRes.status}`);
+  const parentCommitSha = (await refRes.json()).object.sha;
+
+  // Collision-safe archive folder name, checked against the tree already in memory (no extra
+  // call). A second same-day reset gets an HH-MM-SS suffix instead of overwriting.
+  const date = getTodaysDate();
+  let archiveRoot = `Archive/${date}`;
+  const collides = tree.some(item => item.path.startsWith(`${archiveRoot}/`));
+  if (collides) {
+    const now = new Date();
+    const suffix = [now.getHours(), now.getMinutes(), now.getSeconds()]
+      .map(n => String(n).padStart(2, '0'))
+      .join('-');
+    archiveRoot = `${archiveRoot} ${suffix}`;
+  }
+
+  // 3. New blobs for the freshly re-provisioned root files - same shape provisionRepoFiles()
+  // creates for a brand-new repo link (zeroed stats.json, scaffolded README.md).
+  const [statsBlobRes, readmeBlobRes] = await Promise.all([
+    fetch(`https://api.github.com/repos/${leethub_hook}/git/blobs`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        content: encodeJsonContent({ easy: '0', medium: '0', hard: '0' }),
+        encoding: 'base64',
+      }),
+    }),
+    fetch(`https://api.github.com/repos/${leethub_hook}/git/blobs`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        content: btoa(unescape(encodeURIComponent(DEFAULT_REPO_README))),
+        encoding: 'base64',
+      }),
+    }),
+  ]);
+  if (!statsBlobRes.ok)
+    throw new Error(`Failed to create stats.json blob: HTTP ${statsBlobRes.status}`);
+  if (!readmeBlobRes.ok)
+    throw new Error(`Failed to create README.md blob: HTTP ${readmeBlobRes.status}`);
+  const newStatsBlobSha = (await statsBlobRes.json()).sha;
+  const newReadmeBlobSha = (await readmeBlobRes.json()).sha;
+
+  // 4. Tree patch: move every LeetCode/ blob, stats.json, and README.md into Archive/{date}/ in
+  // place - same blob shas, only the paths change - plus fresh stats.json and README.md blobs
+  // at the root. config.json isn't touched, so it's simply not mentioned - base_tree carries it
+  // forward.
+  const patch = [];
+  for (const item of tree) {
+    if (item.type !== 'blob') continue;
+    if (item.path.startsWith('LeetCode/')) {
+      patch.push({ path: item.path, mode: item.mode, type: 'blob', sha: null });
+      patch.push({
+        path: `${archiveRoot}/${item.path}`,
+        mode: item.mode,
+        type: 'blob',
+        sha: item.sha,
+      });
+    } else if (item.path === STATS_FILENAME || item.path === README_FILENAME) {
+      patch.push({ path: item.path, mode: item.mode, type: 'blob', sha: null });
+      patch.push({
+        path: `${archiveRoot}/${item.path}`,
+        mode: item.mode,
+        type: 'blob',
+        sha: item.sha,
+      });
+    }
+  }
+  patch.push({ path: STATS_FILENAME, mode: '100644', type: 'blob', sha: newStatsBlobSha });
+  patch.push({ path: README_FILENAME, mode: '100644', type: 'blob', sha: newReadmeBlobSha });
+
+  const newTreeRes = await fetch(`https://api.github.com/repos/${leethub_hook}/git/trees`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ base_tree: baseTreeSha, tree: patch }),
+  });
+  if (!newTreeRes.ok) throw new Error(`Failed to create archive tree: HTTP ${newTreeRes.status}`);
+  const newTreeSha = (await newTreeRes.json()).sha;
+
+  // 5. Commit it.
+  const commitRes = await fetch(`https://api.github.com/repos/${leethub_hook}/git/commits`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      message: `Archive LeetCode/, stats.json, and README.md to ${archiveRoot} - LeetHub`,
+      tree: newTreeSha,
+      parents: [parentCommitSha],
+    }),
+  });
+  if (!commitRes.ok) throw new Error(`Failed to create archive commit: HTTP ${commitRes.status}`);
+  const newCommitSha = (await commitRes.json()).sha;
+
+  // 6. Move the branch ref to point at it.
+  const updateRefRes = await fetch(
+    `https://api.github.com/repos/${leethub_hook}/git/refs/heads/main`,
+    { method: 'PATCH', headers, body: JSON.stringify({ sha: newCommitSha }) }
+  );
+  if (!updateRefRes.ok) {
+    throw new Error(`Failed to update branch ref: HTTP ${updateRefRes.status}`);
+  }
+
+  return saveLocalStats({ easy: 0, medium: 0, hard: 0 });
+}
+
 export {
   addLeadingZeros,
+  archiveAndResetStats,
   assert,
   buildProblemPath,
   checkElem,
