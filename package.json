@@ -6,13 +6,14 @@
   "type": "module",
   "scripts": {
     "dev": "webpack --mode=production --watch",
-    "setup": "pnpm install",
+    "setup": "pnpm install && cp .githooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit",
     "format": "prettier --write **/*.{js,jsx,ts,tsx,css,html}",
     "format-test": "prettier --check **/*.{js,jsx,ts,tsx,css,html}",
     "lint": "eslint **/*.{js,ts} --fix",
     "lint-test": "eslint **/*.{js,ts} --color",
     "build": "webpack --mode=production",
-    "test": "jasmine"
+    "test": "jasmine",
+    "check-leaks": "node scripts/dev/check-leaks.mjs"
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^120.0.4",

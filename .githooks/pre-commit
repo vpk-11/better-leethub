@@ -1,0 +1,4 @@
+#!/bin/sh
+# Version-controlled pre-commit hook (see .gitignore's git/hooks note in dev docs).
+# Installed by `pnpm run setup` via `git config core.hooksPath .githooks`.
+node scripts/dev/check-leaks.mjs
