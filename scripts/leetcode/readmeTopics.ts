@@ -1,21 +1,28 @@
-import { LeetHubError } from "./util.js";
+import { LeetHubError } from './util.js';
 
 const leetCodeSectionStart = `<!---LeetCode Topics Start-->`;
 const leetCodeSectionHeader = `# LeetCode Topics`;
 const leetCodeSectionEnd = `<!---LeetCode Topics End-->`;
 
 /**
- * @param {string} topic - Topic to which the problem will be added.
- * @param {string} markdownFile - The markdown file content.
- * @param {string} hook - github hook (username/repo).
- * @param {string} problem - Problem slug, used as both the display text and the dedup key -
+ * @param topic - Topic to which the problem will be added.
+ * @param markdownFile - The markdown file content.
+ * @param hook - github hook (username/repo).
+ * @param problem - Problem slug, used as both the display text and the dedup key -
  *   stable regardless of folder settings.
- * @param {string} problemPath - The problem's actual directory path (may be prefixed with
+ * @param problemPath - The problem's actual directory path (may be prefixed with
  *   LeetCode/, difficulty, and/or language folders per settings) - used only for the link URL.
- * @param {string} difficulty - PascalCase difficulty, e.g. "Easy".
- * @returns {string} - The updated markdown file content.
+ * @param difficulty - PascalCase difficulty, e.g. "Easy".
+ * @returns The updated markdown file content.
  */
-function appendProblemToReadme(topic, markdownFile, hook, problem, problemPath, difficulty) {
+function appendProblemToReadme(
+  topic: string,
+  markdownFile: string,
+  hook: string,
+  problem: string,
+  problemPath: string,
+  difficulty: string
+): string {
   const url = `https://github.com/${hook}/tree/main/${problemPath}`;
   const topicHeader = `## ${topic}`;
   const topicTableHeader = `\n${topicHeader}\n| Problem Name | Difficulty |\n| ------- | ------- |\n`;
@@ -32,12 +39,12 @@ function appendProblemToReadme(topic, markdownFile, hook, problem, problemPath, 
   // Get LeetCode section and the Before & After sections
   const beforeSection = markdownFile.slice(0, markdownFile.indexOf(leetCodeSectionStart));
   const afterSection = markdownFile.slice(
-    markdownFile.indexOf(leetCodeSectionEnd) + leetCodeSectionEnd.length,
+    markdownFile.indexOf(leetCodeSectionEnd) + leetCodeSectionEnd.length
   );
 
   let leetCodeSection = markdownFile.slice(
     markdownFile.indexOf(leetCodeSectionStart) + leetCodeSectionStart.length,
-    markdownFile.indexOf(leetCodeSectionEnd),
+    markdownFile.indexOf(leetCodeSectionEnd)
   );
 
   // Check if topic table exists, or add it
@@ -49,7 +56,8 @@ function appendProblemToReadme(topic, markdownFile, hook, problem, problemPath, 
 
   // Get the Topic table. If topic table was just added, then its end === LeetCode Section end
   const endTopicString = leetCodeSection.slice(topicTableIndex).match(/\|\n[^|]/)?.[0];
-  const endTopicIndex = (endTopicString != null) ? leetCodeSection.indexOf(endTopicString, topicTableIndex + 1) : -1;
+  const endTopicIndex =
+    endTopicString != null ? leetCodeSection.indexOf(endTopicString, topicTableIndex + 1) : -1;
   let topicTable =
     endTopicIndex === -1
       ? leetCodeSection.slice(topicTableIndex)
@@ -83,22 +91,24 @@ function appendProblemToReadme(topic, markdownFile, hook, problem, problemPath, 
 }
 
 // Sorts each Topic table by the problem number
-function sortTopicsInReadme(markdownFile) {
+function sortTopicsInReadme(markdownFile: string): string {
   let beforeSection = markdownFile.slice(0, markdownFile.indexOf(leetCodeSectionStart));
   const afterSection = markdownFile.slice(
-    markdownFile.indexOf(leetCodeSectionEnd) + leetCodeSectionEnd.length,
+    markdownFile.indexOf(leetCodeSectionEnd) + leetCodeSectionEnd.length
   );
 
   // Matches any text between the start and end tags. Should never fail to match.
   const leetCodeSection = markdownFile.match(
-    new RegExp(`${leetCodeSectionStart}([\\s\\S]*)${leetCodeSectionEnd}`),
+    new RegExp(`${leetCodeSectionStart}([\\s\\S]*)${leetCodeSectionEnd}`)
   )?.[1];
   if (leetCodeSection == null) throw new LeetHubError('LeetCodeTopicSectionNotFound');
-  
 
-  // Remove the header
+  // Split off everything before the first topic table - the header plus whatever else lives
+  // in that preamble (e.g. the "synced with LeetHub" line). Captured and carried through to
+  // reconstruction below instead of discarded - a hardcoded header-only reconstruction here
+  // used to silently drop that line on every single append.
   let topics = leetCodeSection.trim().split('## ');
-  topics.shift();
+  const preamble = topics.shift()?.trim() ?? leetCodeSectionHeader;
 
   // Get Array<sorted-topic>
   topics = topics.map(section => {
@@ -108,8 +118,8 @@ function sortTopicsInReadme(markdownFile) {
     const topic = lines.shift();
 
     // Check if topic exists elsewhere
-    let topicHeaderIndex = markdownFile.indexOf(`## ${topic}`);
-    let leetCodeSectionStartIndex = markdownFile.indexOf(leetCodeSectionStart);
+    const topicHeaderIndex = markdownFile.indexOf(`## ${topic}`);
+    const leetCodeSectionStartIndex = markdownFile.indexOf(leetCodeSectionStart);
     if (topicHeaderIndex < leetCodeSectionStartIndex) {
       // matches the next '|\n' that doesn't precede a '|'. Typically this is '|\n#. Should always match if topic existed elsewhere.
       const endTopicString = markdownFile.slice(topicHeaderIndex).match(/\|\n[^|]/)?.[0];
@@ -121,7 +131,7 @@ function sortTopicsInReadme(markdownFile) {
       const problemsToMerge = topicSection.trim().split('\n').slice(3);
 
       // Merge previously solved problems and removes duplicates
-      lines = lines.concat(problemsToMerge).reduce((array, element) => {
+      lines = lines.concat(problemsToMerge).reduce((array: string[], element) => {
         if (!array.includes(element)) {
           array.push(element);
         }
@@ -138,9 +148,12 @@ function sortTopicsInReadme(markdownFile) {
     lines = lines.slice(2);
 
     lines.sort((a, b) => {
-      let numA = parseInt(a.match(/\/(\d+)-/)[1]);
-      let numB = parseInt(b.match(/\/(\d+)-/)[1]);
-      return numA - numB;
+      const matchA = a.match(/\/(\d+)-/);
+      const matchB = b.match(/\/(\d+)-/);
+      if (matchA == null || matchB == null) {
+        throw new LeetHubError('ProblemNumberNotFound');
+      }
+      return parseInt(matchA[1], 10) - parseInt(matchB[1], 10);
     });
 
     // Reconstruct the topic
@@ -150,12 +163,11 @@ function sortTopicsInReadme(markdownFile) {
   });
 
   // Reconstruct the file
-  markdownFile =
+  return (
     beforeSection +
-    [leetCodeSectionStart, leetCodeSectionHeader, ...topics, leetCodeSectionEnd].join('\n') +
-    afterSection;
-
-  return markdownFile;
+    [leetCodeSectionStart, preamble, ...topics, leetCodeSectionEnd].join('\n') +
+    afterSection
+  );
 }
 
 export { appendProblemToReadme, sortTopicsInReadme };

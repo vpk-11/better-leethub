@@ -22,6 +22,23 @@ describe('sortTopicsInReadme', () => {
     expect(indexOf0021).toBeGreaterThan(-1);
     expect(indexOf0001).toBeLessThan(indexOf0021);
   });
+
+  it('preserves the synced-with-LeetHub line in the preamble instead of dropping it', () => {
+    const markdown = [
+      '\x3C!---LeetCode Topics Start-->',
+      '# LeetCode Topics',
+      'This repository is synced with [LeetHub](https://github.com/any/LeetHub).',
+      '## Array',
+      '| Problem Name | Difficulty |',
+      '| ------- | ------- |',
+      '| [0001-two-sum](https://github.com/any/tree/main/LeetCode/0001-two-sum) | Easy |',
+      '',
+      '\x3C!---LeetCode Topics End-->',
+    ].join('\n');
+
+    const output = sortTopicsInReadme(markdown);
+    expect(output).toContain('This repository is synced with [LeetHub](https://github.com/any/LeetHub).');
+  });
 });
 
 describe('appendProblemToReadme', () => {
