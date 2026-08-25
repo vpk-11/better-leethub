@@ -6,7 +6,6 @@ export default tseslint.config(
       'dist/**',
       'node_modules/**',
       'scripts/jquery-3.3.1.min.js',
-      'scripts/semantic-2.4.1.min.js',
     ],
   },
   ...tseslint.configs.recommended,

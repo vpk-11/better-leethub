@@ -1,65 +1,297 @@
+html,
 body {
-  background-color: #000000 !important;
-  padding: 10px;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-8);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--accent-wash);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-data);
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.brand-text .name {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.brand-text .name em {
+  font-style: normal;
+  color: var(--accent-text);
+}
+
+main {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-8) var(--space-8);
+}
+
+.banner {
+  font-size: 13px;
+  padding: var(--space-3) var(--space-4);
+  border-radius: 10px;
+  margin-bottom: var(--space-4);
+}
+
+.banner-error {
+  background: color-mix(in srgb, var(--hard) 14%, var(--surface));
+  color: var(--hard);
+}
+
+.banner-success {
+  background: color-mix(in srgb, var(--easy) 14%, var(--surface));
+  color: var(--easy);
+}
+
+/* --- Setup state --- */
+.hero {
   text-align: center;
-  transition: background-color 0.75s ease;
-  font-family: 'Helvetica Neue', 'Lucida Grande', sans-serif;
+  max-width: 480px;
+  margin: 0 auto var(--space-8);
 }
 
-#title {
-  font-family: 'Norwester', 'Helvetica Neue', 'Lucida Grande',
-    sans-serif;
-  font-size: 5em;
-  font-weight: bold;
-  margin-bottom: 0px;
-  margin-top: 10px;
+.hero h1 {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-2);
+  text-wrap: balance;
 }
 
-.caption {
-  font-family: 'Norwester', 'Helvetica Neue', 'Lucida Grande',
-    sans-serif;
-  font-size: 1.5em;
-  font-weight: normal !important;
-  margin-top: 3px !important;
-  margin-bottom: 0px;
-}
-#error {
-  font-family: 'Norwester', 'Helvetica Neue', 'Lucida Grande',
-    sans-serif;
-  font-weight: normal !important;
-  color: red !important;
-  margin-bottom: 0px;
+.hero h1 em {
+  font-style: normal;
+  color: var(--accent-text);
 }
 
-#success {
-  font-family: 'Norwester', 'Helvetica Neue', 'Lucida Grande',
-    sans-serif;
-  font-size: 1.1em;
-  font-weight: normal !important;
-  color: green !important;
-  margin-bottom: 0px;
+.hero p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
 }
 
-#unlink {
-  font-family: 'Norwester', 'Helvetica Neue', 'Lucida Grande',
-    sans-serif;
-  font-size: 1.1em;
-  font-weight: normal !important;
-  color: green !important;
-  margin-bottom: 0px;
+.setup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+  align-items: start;
 }
 
-p {
-  color: white !important;
-}
-.onboarding {
-  font-family: sans-serif;
-  border-top: solid white 1px;
-  font-weight: 500;
-  font-size: medium;
+@media (max-width: 760px) {
+  .setup-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-a {
-  color: white !important;
+.card {
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 var(--space-1);
+}
+
+.panel-sub {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  margin: 0 0 var(--space-5);
+}
+
+.step {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.step:last-child {
+  margin-bottom: 0;
+}
+
+.step .num {
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-wash);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.step p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.step code {
+  font-family: var(--font-data);
+  font-size: 11.5px;
+  background: var(--surface-raised);
+  padding: 1px 5px;
+  border-radius: 5px;
+  color: var(--text);
+}
+
+.step a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.field {
+  margin-bottom: var(--space-4);
+  text-align: left;
+}
+
+.field label {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-subtle);
+  margin-bottom: 6px;
+}
+
+.field .text-field {
+  font-size: 13px;
+  padding: 11px 13px;
+}
+
+/* --- Connected state --- */
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.repo-chip {
+  padding: 8px var(--space-4);
+}
+
+.repo-chip .repo-name {
+  font-size: 13px;
+}
+
+.unlink-link {
+  font-size: 12px;
+  color: var(--text-subtle);
+  background: none;
+  border: none;
+  padding: 0;
   cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.unlink-link:hover {
+  color: var(--text);
+}
+
+.dashboard-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.stats-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.stats-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 0;
+}
+
+.stats-total .value {
+  font-size: 28px;
+}
+
+.stats-breakdown {
+  display: flex;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 260px;
+}
+
+.stat-cell {
+  flex: 1;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  border-radius: 12px;
+}
+
+.action-row {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.status-line {
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin: var(--space-3) 0 0;
+}
+
+footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-8) var(--space-8);
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+footer .footer-left {
+  text-align: left;
+}
+
+footer .footer-right {
+  text-align: right;
+}
+
+footer a {
+  color: var(--accent-text);
+  text-decoration: none;
 }

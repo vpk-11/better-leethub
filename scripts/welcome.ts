@@ -4,13 +4,27 @@ import {
   getBrowser,
   githubHeaders,
   provisionRepoFiles,
+  pushConfigToRepo,
   recomputeStatsFromRepo,
   syncConfigFromRepo,
   syncStatsFromRepo,
 } from './leetcode/util.js';
 import type { StatsCounts } from './leetcode/util.js';
+import { renderConfigsSummary } from './configsSummary.js';
+import { wireConfigsEditForm } from './configsEdit.js';
+import { initTheme } from './theme.js';
 
 const api = getBrowser();
+
+initTheme();
+
+/* Folder structure, timestamped filenames, solution-post auto-commit, commit-message
+ * template - same settings/storage keys, same shared edit-form wiring as popup.ts (see
+ * configsEdit.ts), since config.json (and the local storage it's synced with) is one shared
+ * setting shape, editable from either surface. This page isn't a transient popup, so
+ * pushConfigToRepo() can run directly here - no popup-teardown risk (unlike popup.ts, which
+ * routes it through background.js). */
+wireConfigsEditForm(() => pushConfigToRepo());
 
 /** Renders the reconciled stats returned by stats sync. */
 const renderStats = (stats: (StatsCounts & { solved?: number }) | null | undefined): void => {
@@ -19,6 +33,13 @@ const renderStats = (stats: (StatsCounts & { solved?: number }) | null | undefin
   $('#p_solved_easy').text(stats.easy ?? 0);
   $('#p_solved_medium').text(stats.medium ?? 0);
   $('#p_solved_hard').text(stats.hard ?? 0);
+};
+
+/** Sets #sync_status's text - a theme-aware color would need its own status classes, but a
+ * single muted color reads fine here since this line is informational, not error/success
+ * (errors already show inline in the button response). */
+const setSyncStatus = (text: string): void => {
+  $('#sync_status').text(text);
 };
 
 /* Validates a PAT against the GitHub API. Returns the user object on success, null on failure. */
@@ -53,18 +74,15 @@ const validateRepo = async (
 const showCommitMode = (hook: string): void => {
   $('#hook_mode').hide();
   $('#commit_mode').show();
-  $('#unlink').show();
   $('#repo_url').html(
-    `<a target="_blank" style="color: aqua !important;" href="https://github.com/${escapeHtml(
-      hook
-    )}">${escapeHtml(hook)}</a>`
+    `<a target="_blank" href="https://github.com/${escapeHtml(hook)}">${escapeHtml(hook)}</a>`
   );
+  renderConfigsSummary();
 };
 
 const showHookMode = (): void => {
   $('#hook_mode').show();
   $('#commit_mode').hide();
-  $('#unlink').hide();
 };
 
 const unlinkRepo = (): void => {
@@ -146,45 +164,41 @@ $('#hook_button').on('click', async () => {
 
   // Run sequential provisioning: config first, then stats (avoids API rate limits)
   try {
-    $('#sync_status')
-      .text('Initializing repo files (config.json & stats.json)...')
-      .css('color', '#bfc0b9');
+    setSyncStatus('Initializing repo files (config.json & stats.json)...');
     const stats = await provisionRepoFiles();
     renderStats(stats);
-    $('#sync_status')
-      .text('Initialization complete! Config and stats are in sync.')
-      .css('color', '#5cb85c');
+    renderConfigsSummary();
+    setSyncStatus('Initialization complete! Config and stats are in sync.');
   } catch (err) {
     console.error('LeetHub: sequential initialization error', err);
-    $('#sync_status')
-      .text('Connected! Automatic sync had an issue. Use the manual buttons below to retry.')
-      .css('color', '#f0ad4e');
+    setSyncStatus('Connected! Automatic sync had an issue. Use the manual buttons below to retry.');
   }
 });
 
 /* Manual Action Failover Buttons */
 $('#sync_config').on('click', async () => {
-  $('#sync_status').text('Checking and syncing config.json from GitHub...').css('color', '#bfc0b9');
+  setSyncStatus('Checking and syncing config.json from GitHub...');
   try {
     await syncConfigFromRepo();
-    $('#sync_status').text('config.json successfully synced with GitHub!').css('color', '#5cb85c');
+    renderConfigsSummary();
+    setSyncStatus('config.json successfully synced with GitHub!');
   } catch (err) {
     console.error('LeetHub: manual sync_config error', err);
     const message = err instanceof Error ? err.message : String(err);
-    $('#sync_status').text(`Failed to sync config.json: ${message}`).css('color', '#d9534f');
+    setSyncStatus(`Failed to sync config.json: ${message}`);
   }
 });
 
 $('#sync_counts').on('click', async () => {
-  $('#sync_status').text('Checking and syncing stats.json from GitHub...').css('color', '#bfc0b9');
+  setSyncStatus('Checking and syncing stats.json from GitHub...');
   try {
     const stats = await recomputeStatsFromRepo();
     renderStats(stats);
-    $('#sync_status').text('stats.json successfully synced with GitHub!').css('color', '#5cb85c');
+    setSyncStatus('stats.json successfully synced with GitHub!');
   } catch (err) {
     console.error('LeetHub: manual sync_counts error', err);
     const message = err instanceof Error ? err.message : String(err);
-    $('#sync_status').text(`Failed to sync stats.json: ${message}`).css('color', '#d9534f');
+    setSyncStatus(`Failed to sync stats.json: ${message}`);
   }
 });
 
@@ -196,23 +210,19 @@ $('#archive_reset').on('click', async () => {
   );
   if (!confirmed) return;
 
-  $('#sync_status')
-    .text('Archiving LeetCode/, stats.json, and README.md...')
-    .css('color', '#bfc0b9');
+  setSyncStatus('Archiving LeetCode/, stats.json, and README.md...');
   try {
     const stats = await archiveAndResetStats();
     renderStats(stats);
-    $('#sync_status')
-      .text('Archived! stats.json and README.md have been reset.')
-      .css('color', '#5cb85c');
+    setSyncStatus('Archived! stats.json and README.md have been reset.');
   } catch (err) {
     console.error('LeetHub: archive-and-reset error', err);
     const message = err instanceof Error ? err.message : String(err);
-    $('#sync_status').text(`Failed to archive and reset: ${message}`).css('color', '#d9534f');
+    setSyncStatus(`Failed to archive and reset: ${message}`);
   }
 });
 
-$('#unlink a').on('click', () => {
+$('#unlink').on('click', () => {
   unlinkRepo();
 });
 

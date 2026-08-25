@@ -17,7 +17,7 @@ const createToolTip = (): HTMLDivElement => {
   toolTip.textContent =
     'Push this submission to GitHub.\nRight-click to add a suffix and keep multiple versions.\nPlease be mindful of your GitHub rate-limits.';
   toolTip.className =
-    'fixed bg-sd-popover text-sd-popover-foreground rounded-sd-md z-modal text-xs text-left font-normal whitespace-pre-line shadow p-3 border-sd-border border cursor-default translate-y-20 transition-opacity opacity-0 transition-delay-1000 duration-300 group-hover:opacity-100';
+    'fixed bg-sd-popover text-sd-popover-foreground rounded-sd-md z-modal text-xs text-left font-normal whitespace-pre-line shadow p-3 border-sd-border border cursor-default translate-y-20 pointer-events-none transition-opacity opacity-0 duration-300';
   return toolTip;
 };
 
@@ -77,11 +77,31 @@ function addManualSubmitBtn(
   const submitButton = document.createElement('button');
   submitButton.id = 'manualGitSubmit';
   submitButton.className =
-    'group whitespace-nowrap focus:outline-none text-label-r bg-green-s dark:bg-dark-blue-s hover:bg-green-3 dark:hover:bg-dark-blue-3 flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium';
+    'whitespace-nowrap focus:outline-none text-label-r bg-green-s dark:bg-dark-blue-s hover:bg-green-3 dark:hover:bg-dark-blue-3 flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium';
   submitButton.setAttribute('style', 'background-color:darkorange');
   submitButton.textContent = 'Push ';
   submitButton.prepend(createGitIcon());
-  submitButton.appendChild(createToolTip());
+  const toolTip = createToolTip();
+  submitButton.appendChild(toolTip);
+
+  /* Real mouseenter/mouseleave on this exact button, not Tailwind's `.group`/`group-hover` -
+     LeetCode's own page reuses `.group` ambiently elsewhere in this button row, so
+     `group-hover` fired on any ancestor with that class being hovered, not just this one
+     (the actual cause of the tooltip showing up nowhere near the button). Scoped to this
+     element only. Keeps the same ~1s show delay the original CSS `transition-delay` gave. */
+  let showTimeout: ReturnType<typeof setTimeout> | undefined;
+  submitButton.addEventListener('mouseenter', () => {
+    showTimeout = setTimeout(() => {
+      toolTip.classList.remove('opacity-0');
+      toolTip.classList.add('opacity-100');
+    }, 1000);
+  });
+  submitButton.addEventListener('mouseleave', () => {
+    clearTimeout(showTimeout);
+    toolTip.classList.remove('opacity-100');
+    toolTip.classList.add('opacity-0');
+  });
+
   submitButton.addEventListener('click', () => {
     resolveSubmissionId();
     loader(leetCode);

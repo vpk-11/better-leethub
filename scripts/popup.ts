@@ -1,7 +1,12 @@
 import { escapeHtml, getBrowser } from './leetcode/util.js';
 import type { StatsCounts } from './leetcode/util.js';
+import { renderConfigsSummary } from './configsSummary.js';
+import { wireConfigsEditForm } from './configsEdit.js';
+import { initTheme } from './theme.js';
 
 const api = getBrowser();
+
+initTheme();
 
 /** Renders the reconciled stats returned by a POPUP_SYNC response into the DOM. */
 const renderStats = (stats: (StatsCounts & { solved: number }) | undefined): void => {
@@ -15,112 +20,60 @@ const renderStats = (stats: (StatsCounts & { solved: number }) | undefined): voi
 /* Sync (stats + config.json) runs in the background script, not here - the popup's own JS
    context can be torn down as soon as it closes/loses focus, which was killing the sync
    mid-flight (worse on Firefox than Chrome). See background.js. */
-const pushConfigToRepo = () => api.runtime.sendMessage({ type: 'PUSH_CONFIG' });
+wireConfigsEditForm(() => api.runtime.sendMessage({ type: 'PUSH_CONFIG' }));
 
-/* Get URL for welcome page */
-$('#welcome_URL').attr('href', api.runtime.getURL('welcome.html'));
-$('#hook_URL').attr('href', api.runtime.getURL('welcome.html'));
-$('#authenticate').attr('href', api.runtime.getURL('welcome.html'));
-
-/* Folder structure, timestamped filenames, solution-post auto-commit, commit-message
-   template: 3.0's real settings, ported to this codebase's own leethub_-prefixed storage
-   keys (internal only - the commit-message *variables* below use 3.0's real names). */
-$('#collapsible-commit-message-icon').click(() => {
-  $('#collapsible-commit-message-icon').toggleClass('open');
-  $('#collapsible-commit-message-container').toggle();
-  api.storage.local.get(['leethub_custom_commit_message'], data => {
-    const commitMessage = data.leethub_custom_commit_message;
-    if (!commitMessage) {
-      $('#custom-commit-msg').attr(
-        'placeholder',
-        '{date} - {problemName} - {problemTopic} - {difficulty} - {language}'
-      );
-    } else {
-      $('#custom-commit-msg').val(commitMessage);
-    }
-  });
+/* Auth/repo-linking always forces a real standalone tab, never rendered inside the popup's
+ * own window - a popup tears down the instant it loses focus, and generating a PAT means a
+ * github.com trip that always steals focus (confirmed not Firefox-specific, see
+ * decisions.md). Applies on both Chrome and Firefox. */
+const welcomeUrl = api.runtime.getURL('welcome.html');
+$('#start-connect').attr('href', welcomeUrl);
+$('#start-connect, #settings-link-different-repo, #settings-logout-reauth').on('click', e => {
+  e.preventDefault();
+  api.tabs.create({ url: welcomeUrl });
 });
 
-$('#collapsible-difficulty-icon').click(() => {
-  $('#collapsible-difficulty-icon').toggleClass('open');
-  $('#collapsible-difficulty-container').toggle();
-  api.storage.local.get({ leethub_use_difficulty_folder: false }, data => {
-    $('#use-difficulty-folder').prop('checked', data.leethub_use_difficulty_folder);
-  });
+/* Gear icon -> Settings view (Level 2: Archive & Reset, Link a Different Repo, Logout/
+ * Re-auth), back arrow returns to Normal view. */
+$('#settings-gear-icon').click(() => {
+  $('#popup_normal_view').hide();
+  $('#popup_settings_view').show();
 });
-$('#use-difficulty-folder').change(function () {
-  api.storage.local.set(
-    { leethub_use_difficulty_folder: $(this).is(':checked') },
-    pushConfigToRepo
+$('#settings-back-icon').click(() => {
+  $('#popup_settings_view').hide();
+  $('#popup_normal_view').show();
+});
+
+/* Archive & Reset must route through background.js, not run directly here - same class of
+ * bug v2-phase-01's round 4 correction already fixed once (Firefox tearing down in-flight
+ * popup fetches). This is several sequential Git Data API calls; if the popup loses focus
+ * mid-operation, a direct-in-popup implementation would repeat that exact failure. */
+$('#settings-archive-reset').click(() => {
+  const confirmed = confirm(
+    'Move LeetCode/, stats.json, and README.md into a dated Archive/ folder, then start fresh ' +
+      'with a new stats.json and README.md? config.json is left untouched. This cannot be ' +
+      'undone from the extension.'
   );
-});
+  if (!confirmed) return;
 
-$('#collapsible-language-icon').click(() => {
-  $('#collapsible-language-icon').toggleClass('open');
-  $('#collapsible-language-container').toggle();
-  api.storage.local.get({ leethub_use_language_folder: false }, data => {
-    $('#use-language-folder').prop('checked', data.leethub_use_language_folder);
-  });
-});
-$('#use-language-folder').change(function () {
-  api.storage.local.set({ leethub_use_language_folder: $(this).is(':checked') }, pushConfigToRepo);
-});
-
-$('#collapsible-timestamp-icon').click(() => {
-  $('#collapsible-timestamp-icon').toggleClass('open');
-  $('#collapsible-timestamp-container').toggle();
-  api.storage.local.get({ leethub_use_timestamp_filename: false }, data => {
-    $('#use-timestamp-filename').prop('checked', data.leethub_use_timestamp_filename);
-  });
-});
-$('#use-timestamp-filename').change(function () {
-  api.storage.local.set(
-    { leethub_use_timestamp_filename: $(this).is(':checked') },
-    pushConfigToRepo
-  );
-});
-
-$('#collapsible-solution-post-icon').click(() => {
-  $('#collapsible-solution-post-icon').toggleClass('open');
-  $('#collapsible-solution-post-container').toggle();
-  api.storage.local.get({ leethub_auto_commit_solution_post: true }, data => {
-    $('#auto-commit-solution-post').prop('checked', data.leethub_auto_commit_solution_post);
-  });
-});
-$('#auto-commit-solution-post').change(function () {
-  api.storage.local.set(
-    { leethub_auto_commit_solution_post: $(this).is(':checked') },
-    pushConfigToRepo
-  );
-});
-
-$('#msg-save-btn').click(() => {
-  const commitMessage = String($('#custom-commit-msg').val()).trim();
-  api.storage.local.set({ leethub_custom_commit_message: commitMessage }, pushConfigToRepo);
-  const successMessage = $('#success-message');
-  successMessage.show();
-  setTimeout(() => successMessage.hide(), 3000);
-});
-
-$('#msg-reset-btn').click(() => {
-  $('#custom-commit-msg').val('');
-  $('#custom-commit-msg').attr(
-    'placeholder',
-    '{date} - {problemName} - {problemTopic} - {difficulty} - {language}'
-  );
-  api.storage.local.set({ leethub_custom_commit_message: null }, pushConfigToRepo);
-});
-
-/* when a variable button is clicked, add it to the custom commit message text area */
-$('.commit-variable').on('click', function () {
-  const variableName = $(this).attr('id');
-  $('#custom-commit-msg').val((_index, currentValue) => `${currentValue}{${variableName}} `);
+  $('#settings_status').text('Archiving...');
+  api.runtime
+    .sendMessage({ type: 'ARCHIVE_RESET' })
+    .then((response: { stats?: StatsCounts & { solved: number }; error?: string }) => {
+      if (response?.error) {
+        $('#settings_status').text(`Failed to archive and reset: ${response.error}`);
+        return;
+      }
+      renderStats(response?.stats);
+      renderConfigsSummary();
+      $('#settings_status').text('Archived! stats.json and README.md have been reset.');
+    });
 });
 
 api.storage.local.get('leethub_token', data => {
   const token = data.leethub_token;
   if (token === null || token === undefined) {
-    $('#auth_mode').show();
+    $('#start_view').show();
   } else {
     // To validate user, load user object from GitHub.
     const AUTHENTICATION_URL = 'https://api.github.com/user';
@@ -133,13 +86,14 @@ api.storage.local.get('leethub_token', data => {
           api.storage.local.get('mode_type', data2 => {
             if (data2 && data2.mode_type === 'commit') {
               $('#commit_mode').show();
+              renderConfigsSummary();
               /* Get problem stats and repo link */
               api.storage.local.get(['stats', 'leethub_hook'], data3 => {
                 renderStats(data3?.stats);
                 const leethubHook = data3?.leethub_hook;
                 if (leethubHook) {
                   $('#repo_url').html(
-                    `<a target="blank" style="color: cadetblue !important; font-size:0.8em;" href="https://github.com/${escapeHtml(
+                    `<a target="_blank" href="https://github.com/${escapeHtml(
                       leethubHook
                     )}">${escapeHtml(leethubHook)}</a>`
                   );
@@ -151,12 +105,13 @@ api.storage.local.get('leethub_token', data => {
                 // run here directly) so it survives the popup closing mid-fetch.
                 api.runtime
                   .sendMessage({ type: 'POPUP_SYNC' })
-                  .then((response: { stats?: StatsCounts & { solved: number } }) =>
-                    renderStats(response?.stats)
-                  );
+                  .then((response: { stats?: StatsCounts & { solved: number } }) => {
+                    renderStats(response?.stats);
+                    renderConfigsSummary(); // background pulled config.json - re-read local
+                  });
               });
             } else {
-              $('#hook_mode').show();
+              $('#start_view').show();
             }
           });
         } else if (xhr.status === 401) {
@@ -164,7 +119,7 @@ api.storage.local.get('leethub_token', data => {
           // reset token and redirect to authorization process again!
           api.storage.local.set({ leethub_token: null }, () => {
             console.log('Bad token. Redirecting back to auth.');
-            $('#auth_mode').show();
+            $('#start_view').show();
           });
         }
       }
