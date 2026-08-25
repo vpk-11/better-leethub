@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": false,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    // ts-loader captures emitted output in-memory for webpack and never writes to disk
+    // itself, so this directory is never actually created during a real build - it exists
+    // only so tsc's own emit-path computation for allowJs .js/.mjs files (which would
+    // otherwise land on the exact same path as their source) doesn't collide with the
+    // input, which tsserver (the IDE's type checker) checks even though ts-loader doesn't.
+    "outDir": "./.ts-out",
+    "rootDir": "./scripts",
+    "types": ["chrome-types", "firefox-webext-browser", "jquery"]
+  },
+  "include": ["scripts/**/*"],
+  "exclude": ["dist", "node_modules", "scripts/jquery-3.3.1.min.js"]
+}
