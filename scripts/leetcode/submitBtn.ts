@@ -1,3 +1,5 @@
+import type { LeetCodeV1, LeetCodeV2 } from './versions.js';
+
 /* Manual "Push" button - lives on the submission/results page (not the code editor), by
    explicit project-owner preference: a re-push/fallback/versioning control that reads more
    naturally next to the Accepted result than sitting in the editor toolbar. Auto-push (the
@@ -5,11 +7,11 @@
    MAIN-world interceptor - this button exists for re-pushing an already-viewed submission or
    adding a versioned suffix (right-click), not for detection. */
 
-const getSubmissionPageBtns = () => {
+const getSubmissionPageBtns = (): Element | null => {
   return document.querySelector('.flex.flex-none.gap-2:not(.justify-center):not(.justify-between)');
 };
 
-const createToolTip = () => {
+const createToolTip = (): HTMLDivElement => {
   const toolTip = document.createElement('div');
   toolTip.id = 'leethub-upload-tooltip';
   toolTip.textContent =
@@ -19,7 +21,7 @@ const createToolTip = () => {
   return toolTip;
 };
 
-const createGitIcon = () => {
+const createGitIcon = (): SVGSVGElement => {
   const uploadIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   uploadIcon.setAttribute('id', 'leethub-upload-icon');
   uploadIcon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
@@ -42,7 +44,7 @@ const createGitIcon = () => {
 };
 
 /* Validate if string can be added as suffix. Can add more constraints if necessary. */
-function isValidSuffix(suffix) {
+function isValidSuffix(suffix: string | null): suffix is string {
   if (!suffix || suffix.length > 255) {
     return false;
   }
@@ -51,13 +53,14 @@ function isValidSuffix(suffix) {
 
 /**
  * Inserts the manual "Push" button into the submission page's button row.
- * @param {LeetCodeV2} leetCode
- * @param {(leetCode: LeetCodeV2, suffix?: string) => void} loader
  */
-function addManualSubmitBtn(leetCode, loader) {
+function addManualSubmitBtn(
+  leetCode: LeetCodeV1 | LeetCodeV2,
+  loader: (leetCode: LeetCodeV1 | LeetCodeV2, suffix?: string) => void
+): void {
   if (document.getElementById('manualGitSubmit')) return;
   const btns = getSubmissionPageBtns();
-  if (!btns || btns.innerText.includes('LeetHub')) return;
+  if (!btns || (btns as HTMLElement).innerText.includes('LeetHub')) return;
 
   /* leetCode.submissionId is only ever populated by the auto-detect interceptor path THIS
      session (see listenForAutoSubmit in leetcode.js). Viewing an already-accepted
@@ -100,10 +103,11 @@ function addManualSubmitBtn(leetCode, loader) {
 /**
  * Watches for the submission page's button row to appear (SPA navigation, so this needs to
  * keep observing rather than running once) and inserts the manual Push button.
- * @param {LeetCodeV2} leetCode
- * @param {(leetCode: LeetCodeV2, suffix?: string) => void} loader
  */
-function setupManualSubmitBtn(leetCode, loader) {
+function setupManualSubmitBtn(
+  leetCode: LeetCodeV1 | LeetCodeV2,
+  loader: (leetCode: LeetCodeV1 | LeetCodeV2, suffix?: string) => void
+): void {
   const observer = new MutationObserver(() => {
     if (window.location.href.match(/\/submissions\//) && getSubmissionPageBtns()) {
       addManualSubmitBtn(leetCode, loader);
