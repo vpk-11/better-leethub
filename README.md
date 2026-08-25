@@ -1,5 +1,5 @@
-<!-- version: v3.0.0 -->
-![Version](https://img.shields.io/badge/version-v3.0.0-blue)
+<!-- version: v4.0.0 -->
+![Version](https://img.shields.io/badge/version-v4.0.0-blue)
 
 <h1 align="center">
   <img src="assets/octocode.png" alt="LeetHub - Automatically sync your code to GitHub." width="400">
@@ -90,6 +90,7 @@ LeetHub builds on two upstream projects:
 - [raphaelheinz/LeetHub-3.0](https://github.com/raphaelheinz/LeetHub-3.0) - the source for this fork's feature/scraper layer (folder structure, commit templating, submission detection).
 
 ## Changelog
+- **v4.0.0** (2026-08-25) — major bump
 - **v3.0.0** (2026-08-24) — major bump
 
 <!-- Auto-updated by .github/workflows/version_bump.yml on every push/merge to main. -->
