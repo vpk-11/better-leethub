@@ -1,130 +1,271 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <link rel="stylesheet" href="css/welcome.css" />
-    <script src="scripts/jquery-3.3.1.min.js"></script>
-
+    <meta charset="UTF-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.css"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
-    <script src="scripts/semantic-2.4.1.min.js"></script>
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/welcome.css" />
+    <script src="scripts/jquery-3.3.1.min.js"></script>
   </head>
 
   <body>
-    <div class="ui grid container">
-      <div class="sixteen wide center aligned column">
-        <br />
-        <p class="caption" style="font-size: 9em">Leet<span style="color: #ff6c0a">Hub</span></p>
-        <p class="caption">Automatically sync your code from LeetCode to GitHub</p>
-        <br /><br /><br /><br /><br /><br /><br /><br />
-        <p hidden id="error"></p>
-        <p hidden id="success"></p>
-        <p hidden id="unlink">Linked the wrong repo? <a>Unlink</a>.</p>
+    <div class="topbar">
+      <div class="brand-row">
+        <div class="mark">{ }</div>
+        <div class="brand-text"><span class="name">Leet<em>Hub</em></span></div>
       </div>
+      <button class="theme-toggle icon-btn" type="button" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+    </div>
+
+    <main>
+      <p hidden id="error" class="banner banner-error"></p>
+      <p hidden id="success" class="banner banner-success"></p>
 
       <!-- Connect Hook Form -->
-      <div style="display: none" id="hook_mode" class="ui grid container">
-        <div class="sixteen wide column">
-          <p class="caption ui large header center aligned">Connect LeetHub to GitHub</p>
+      <div id="hook_mode" style="display: none">
+        <div class="hero">
+          <h1>Connect Leet<em>Hub</em> to GitHub</h1>
+          <p>Automatically syncs your solved problems to a repo of your choosing.</p>
         </div>
-        <div class="eight wide column">
-          <div class="ui form">
+
+        <div class="setup-grid">
+          <div class="card">
+            <p class="panel-title">How it works</p>
+            <p class="panel-sub">Two steps, then you're syncing.</p>
+
+            <div class="step">
+              <span class="num">1</span>
+              <p>
+                Create a new GitHub repo (recommended for first-time setup) or use an existing
+                one - you'll enter its name on the right.
+              </p>
+            </div>
+            <div class="step">
+              <span class="num">2</span>
+              <p>
+                Generate a fine-grained PAT scoped to that repo with
+                <code>Contents: Read and write</code> and <code>Metadata: Read</code> - nothing
+                else is needed.
+                <a target="_blank" href="https://github.com/settings/personal-access-tokens/new"
+                  >Generate a token →</a
+                >
+              </p>
+            </div>
+          </div>
+
+          <div class="card">
+            <p class="panel-title">Connect your repo</p>
+            <p class="panel-sub">Both fields, then you're set.</p>
+
             <div class="field">
-              <label style="color: #bfc0b9">GitHub Personal Access Token</label>
+              <label for="pat_input">GitHub Personal Access Token</label>
               <input
                 autocomplete="off"
                 id="pat_input"
-                placeholder="Personal Access Token (ghp_... or fine-grained)"
+                class="text-field"
                 type="password"
+                placeholder="ghp_... or fine-grained"
               />
             </div>
-          </div>
-        </div>
-        <div class="eight wide column">
-          <div class="ui form">
             <div class="field">
-              <label style="color: #bfc0b9">GitHub Repository</label>
+              <label for="name">GitHub Repository</label>
               <input
                 autocomplete="off"
                 id="name"
-                placeholder="Repository Name (e.g. LeetCode or owner/LeetCode)"
+                class="text-field"
                 type="text"
+                placeholder="LeetCode or owner/LeetCode"
               />
             </div>
-          </div>
-        </div>
-
-        <div class="sixteen wide center aligned column">
-          <br />
-          <button id="hook_button" class="positive ui large button">Connect Repository</button>
-        </div>
-      </div>
-
-      <!-- Show stats & failover sync controls -->
-      <div style="display: none" id="commit_mode" class="ui grid container">
-        <div class="sixteen wide center aligned column">
-          <br />
-          <div style="font-size: 1.4em; color: white" class="ui header">
-            Connected Repository: <span id="repo_url"></span>
-          </div>
-        </div>
-        <div class="sixteen wide center aligned column">
-          <div style="font-size: 2.3em" class="ui inverted large header">
-            Problems Solved: <span id="p_solved">0</span>
-          </div>
-          <div style="font-size: 1.8em" class="ui inverted large header">
-            <span style="color: #5cb85c">Easy: </span>
-            <span id="p_solved_easy" style="color: #5cb85c">0 </span>
-            <span style="color: #f0ad4e">&ensp; &ensp; Medium: </span>
-            <span id="p_solved_medium" style="color: #f0ad4e">0 </span>
-            <span style="color: #d9534f">&ensp; &ensp; Hard: </span>
-            <span id="p_solved_hard" style="color: #d9534f">0 </span>
-          </div>
-          <br />
-          <div style="margin-top: 10px">
-            <button id="sync_config" class="ui small primary button" type="button">
-              <i class="icon sync"></i> Sync Config
+            <button id="hook_button" class="btn btn-filled" style="width: 100%">
+              Connect Repository
             </button>
-            &ensp;
-            <button id="sync_counts" class="ui small positive button" type="button">
-              <i class="icon sync"></i> Sync Stats
-            </button>
-            &ensp;
-            <button id="archive_reset" class="ui small negative button" type="button">
-              <i class="icon archive"></i> Archive &amp; Reset
-            </button>
-          </div>
-          <div style="margin-top: 12px; color: #5cb85c; font-size: 0.95em" id="sync_status"></div>
-        </div>
-        <div class="sixteen wide center aligned column">
-          <br />
-          <div class="ui inverted small header">
-            Want more features?
-            <a
-              style="color: aqua !important"
-              target="_blank"
-              href="https://github.com/vpk-11/LeetHub-2.0/labels/feature"
-              >Request a feature!</a
-            >
           </div>
         </div>
       </div>
 
-      <!-- Rate on GitHub -->
-      <div class="sixteen wide right aligned column">
-        <br /><br /><br /><br /><br />
-        <div class="ui inverted small header">
-          <a
-            style="color: rgb(143, 202, 202) !important"
-            target="_blank"
-            href="https://github.com/vpk-11/LeetHub-2.0"
-            >Star <span style="color: white">Leet</span
-            ><span style="color: #ff6c0a !important">Hub</span> on GitHub</a
-          >
+      <!-- Connected: stats, configs, manual sync -->
+      <div id="commit_mode" style="display: none">
+        <div class="status-row">
+          <div class="repo-chip">
+            <span class="dot"></span>
+            <span class="repo-name">Connected → <strong id="repo_url"></strong></span>
+          </div>
+          <button id="unlink" class="unlink-link" type="button">
+            Linked the wrong repo? Unlink
+          </button>
+        </div>
+
+        <div class="dashboard-stack">
+          <div class="card stats-card">
+            <div class="stats-total">
+              <span class="label">Problems solved</span>
+              <span class="value" id="p_solved">0</span>
+            </div>
+            <div class="stats-breakdown">
+              <div class="stat-cell is-easy">
+                <span class="stripe"></span>
+                <span class="cell-label">Easy</span>
+                <span class="cell-value" id="p_solved_easy">0</span>
+              </div>
+              <div class="stat-cell is-medium">
+                <span class="stripe"></span>
+                <span class="cell-label">Medium</span>
+                <span class="cell-value" id="p_solved_medium">0</span>
+              </div>
+              <div class="stat-cell is-hard">
+                <span class="stripe"></span>
+                <span class="cell-label">Hard</span>
+                <span class="cell-value" id="p_solved_hard">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Same Configs card as the popup - see configsSummary.ts/configsEdit.ts. -->
+          <div class="card">
+            <div class="configs-head">
+              <span class="title">Configs</span>
+              <button
+                id="configs-edit-icon"
+                class="icon-btn"
+                type="button"
+                aria-label="Edit configs"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+              </button>
+            </div>
+            <hr class="divider" />
+
+            <div id="configs-summary-body">
+              <div class="config-row">
+                <span class="k">Commit message</span>
+                <span class="v" id="config-commit-preview"></span>
+              </div>
+              <div class="config-row">
+                <span class="k">Folder structure</span>
+                <span class="v" id="config-folder-preview"></span>
+              </div>
+              <div class="config-row">
+                <span class="k">Timestamped files</span>
+                <span class="v" id="config-timestamp-preview"></span>
+              </div>
+              <div class="config-row">
+                <span class="k">Solution posts</span>
+                <span class="v" id="config-solution-preview"></span>
+              </div>
+            </div>
+
+            <div id="configs-edit-body" style="display: none">
+              <div class="field-group">
+                <div class="group-title">Commit message</div>
+                <div class="chip-row">
+                  <button class="chip" id="time">time</button>
+                  <button class="chip" id="space">space</button>
+                  <button class="chip" id="date">date</button>
+                  <button class="chip" id="problemName">problemName</button>
+                  <button class="chip" id="difficulty">difficulty</button>
+                  <button class="chip" id="language">language</button>
+                  <button class="chip" id="problemTopic">problemTopic</button>
+                </div>
+                <textarea
+                  rows="2"
+                  id="custom-commit-msg"
+                  class="text-field"
+                  placeholder="{date} - {problemName} - {problemTopic} - {difficulty} - {language}"
+                ></textarea>
+              </div>
+
+              <div class="field-group">
+                <div class="group-title">Folder structure</div>
+                <div class="path-preview" id="folder-live-preview"></div>
+              </div>
+              <div class="settings-row is-grouped">
+                <div class="row-title">Difficulty subfolder</div>
+                <button
+                  class="switch"
+                  id="use-difficulty-folder"
+                  role="switch"
+                  aria-label="Difficulty subfolder"
+                ></button>
+              </div>
+              <div class="settings-row is-grouped">
+                <div class="row-title">Language subfolder</div>
+                <button
+                  class="switch"
+                  id="use-language-folder"
+                  role="switch"
+                  aria-label="Language subfolder"
+                ></button>
+              </div>
+
+              <div class="settings-row">
+                <div>
+                  <div class="row-title">Timestamped filenames</div>
+                  <div class="row-example" id="timestamp-example"></div>
+                </div>
+                <button
+                  class="switch"
+                  id="use-timestamp-filename"
+                  role="switch"
+                  aria-label="Timestamped filenames"
+                ></button>
+              </div>
+              <div class="settings-row">
+                <div class="row-title">Auto-commit solution posts</div>
+                <button
+                  class="switch"
+                  id="auto-commit-solution-post"
+                  role="switch"
+                  aria-label="Auto-commit solution posts"
+                ></button>
+              </div>
+
+              <div class="edit-actions">
+                <button class="btn btn-text" id="msg-reset-btn">Reset</button>
+                <button class="btn btn-filled" id="msg-save-btn">Save</button>
+              </div>
+              <p id="success-message" style="text-align: center; color: var(--accent-text); font-size: 12px; display: none">
+                Saved!
+              </p>
+            </div>
+          </div>
+
+          <div class="card">
+            <p class="panel-title" style="margin-bottom: 4px">Manual sync</p>
+            <p class="panel-sub">Failover controls - normally nothing to do here.</p>
+            <div class="action-row">
+              <button id="sync_config" class="btn btn-text" style="border: 1px solid var(--border)" type="button">
+                Sync Config
+              </button>
+              <button id="sync_counts" class="btn btn-text" style="border: 1px solid var(--border)" type="button">
+                Sync Stats
+              </button>
+              <button id="archive_reset" class="btn btn-danger" type="button">Archive &amp; Reset Stats</button>
+            </div>
+            <p id="sync_status" class="status-line"></p>
+          </div>
         </div>
       </div>
-    </div>
+    </main>
+
+    <footer>
+      <span class="footer-left">
+        Want more features?
+        <a target="_blank" href="https://github.com/vpk-11/LeetHub/labels/feature"
+          >Request a feature</a
+        >
+      </span>
+      <span class="footer-right">
+        <a target="_blank" href="https://github.com/vpk-11/LeetHub">Star LeetHub on GitHub</a>
+      </span>
+    </footer>
 
     <script type="text/javascript" src="scripts/welcome.js"></script>
   </body>

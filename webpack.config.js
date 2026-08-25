@@ -20,14 +20,20 @@ const ignore = [
   '**/.env',
   '**/assets/.DS_Store',
   '**/package*',
+  '**/pnpm-lock.yaml',
   '**/webpack*',
+  '**/tsconfig.json',
+  '**/eslint.config.js',
   '**/README.md',
   '**/assets/extension', // web store assets
   // webpack compiled files
   '**/scripts/leetcode/**',
-  '**/scripts/welcome.js',
-  '**/scripts/popup.js',
-  '**/scripts/background.js',
+  '**/scripts/welcome.ts',
+  '**/scripts/popup.ts',
+  '**/scripts/background.ts',
+  '**/scripts/configsSummary.ts',
+  '**/scripts/configsEdit.ts',
+  '**/scripts/theme.ts',
   '**/manifest-chrome.json',
   '**/manifest-firefox.json',
   // ...entries.map((entry) => `**/${entry}.js`),
@@ -60,6 +66,16 @@ export default {
   optimization: {
     minimize: false,
   },
+  resolve: {
+    extensions: ['.ts', '.js'],
+    // Source imports keep the explicit ESM `.js` specifier even once a file is `.ts` on
+    // disk (the specifier names the future compiled output, standard TS+webpack ESM
+    // pattern) - without this, an import like `./util.js` fails to resolve once `util.js`
+    // is renamed to `util.ts`.
+    extensionAlias: {
+      '.js': ['.ts', '.js'],
+    },
+  },
   output: {
     path: path.resolve(__dirname, 'dist'),
     publicPath: '/dist/',
@@ -71,6 +87,11 @@ export default {
       {
         test: /\.(test)|(spec)\.js$/,
         use: 'ignore-loader',
+      },
+      {
+        test: /\.ts$/,
+        use: 'ts-loader',
+        exclude: /node_modules/,
       },
     ],
   },

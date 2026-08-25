@@ -1,9 +1,13 @@
-.env
+.env*
 scripts/authorize.js
 scripts/oauth2.js
 node_modules
 .vscode
 dist/
+.pnpm-store/
+# tsc's configured outDir - never actually written by the real build (ts-loader captures
+# emit in-memory), only appears if tsc is ever run directly outside webpack
+.ts-out/
 # AI agent working files (local only)
 .claude/
 
