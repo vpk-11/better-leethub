@@ -1,5 +1,5 @@
 /** Enum for languages supported by LeetCode. */
-const languages = Object.freeze({
+const languages: Record<string, string> = Object.freeze({
   C: '.c',
   'C++': '.cpp',
   'C#': '.cs',
@@ -33,15 +33,50 @@ const DIFFICULTY = Object.freeze({
   HARD: 'Hard',
   UNKNOWN: 'Unknown',
 });
+type Difficulty = (typeof DIFFICULTY)[keyof typeof DIFFICULTY];
+
+/** Two-toggle folder layout settings - see buildProblemPath. */
+interface FolderSettings {
+  folderDifficulty: boolean;
+  folderLanguage: boolean;
+}
+
+/** stats.json's file shape (also local storage.stats minus `solved`/`shas`). */
+interface StatsCounts {
+  easy: number;
+  medium: number;
+  hard: number;
+}
+
+/** Local storage.stats - StatsCounts plus the derived total and the upload-dedup SHA cache. */
+interface LocalStats extends StatsCounts {
+  solved: number;
+  shas: Record<string, unknown>;
+}
+
+/** Per-repo config.json shape - mirrors the five leethub_* settings keys, values vary by key
+ * (booleans for the toggles, string for the commit-message template), so this stays loose
+ * rather than pretending to a precise shape two call sites would have to keep in sync. */
+type RepoConfig = Record<string, unknown>;
+
+/** The browser-extension namespace, whichever of the two this browser exposes - see
+ * getBrowser(). Chrome and Firefox's real extension APIs are close enough in shape that every
+ * call site in this codebase (`.runtime`, `.storage.local`) works against either without a
+ * cast, but the two @types packages describe them as fully distinct namespaces, not a shared
+ * interface - so callers narrow with a type assertion at the one point this value is produced,
+ * not scattered across every call site.
+ * ponytail: no shared minimal interface extracted for the union; revisit if a third target
+ * (e.g. Safari) or a call site needing a genuinely divergent method ever gets added. */
+type BrowserApi = typeof chrome | typeof browser;
 
 class LeetHubError extends Error {
-  constructor(message) {
+  constructor(message?: string) {
     super(message);
     this.name = 'LeetHubErr';
   }
 }
 
-function isEmptyObject(obj) {
+function isEmptyObject(obj: object): boolean {
   for (const prop in obj) {
     if (Object.hasOwn(obj, prop)) {
       return false;
@@ -51,7 +86,7 @@ function isEmptyObject(obj) {
   return true;
 }
 
-function assert(truthy, msg) {
+function assert(truthy: unknown, msg?: string): asserts truthy {
   if (!truthy) {
     throw new LeetHubError(msg);
   }
@@ -60,18 +95,22 @@ function assert(truthy, msg) {
 /**
  * Returns a function that can be immediately invoked but will start
  * a timeout of 'wait' milliseconds before it can be called again.
- * @param {Function} func to be called after wait
- * @param {number} wait time in ms
- * @param {boolean} invokeBeforeTimeout true if you want to invoke func before waiting
- * @returns {Function}
+ * @param func to be called after wait
+ * @param wait time in ms
+ * @param invokeBeforeTimeout true if you want to invoke func before waiting
  */
-function debounce(func, wait, invokeBeforeTimeout) {
-  let timeout;
-  return function () {
+function debounce<Args extends unknown[]>(
+  func: (this: unknown, ...args: Args) => void,
+  wait: number,
+  invokeBeforeTimeout?: boolean
+): (this: unknown, ...args: Args) => void {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  return function (this: unknown, ...args: Args) {
+    // func.apply needs the caller's `this` forwarded; that's what this wrapper exists to do.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const context = this;
-    const args = arguments;
     const later = function () {
-      timeout = null;
+      timeout = undefined;
       if (!invokeBeforeTimeout) func.apply(context, args);
     };
     const callNow = invokeBeforeTimeout && !timeout;
@@ -85,20 +124,23 @@ function debounce(func, wait, invokeBeforeTimeout) {
  * Delays the execution of a function by the specified time (in milliseconds)
  * and then executes the function with the provided arguments.
  *
- * @param {Function} func - The function to be executed after the delay.
- * @param {number} wait - The number of milliseconds to wait before executing the function.
- * @param {...*} [args] - Additional arguments to pass to the function when it is called.
- * @returns {Promise<*>} A promise that resolves with the result of the function execution.
+ * @param func - The function to be executed after the delay.
+ * @param wait - The number of milliseconds to wait before executing the function.
+ * @param args - Additional arguments to pass to the function when it is called.
+ * @returns A promise that resolves with the result of the function execution.
  */
-function delay(func, wait, ...args) {
+function delay<T, Args extends unknown[]>(
+  func: (...args: Args) => T,
+  wait: number,
+  ...args: Args
+): Promise<T> {
   return new Promise(resolve => setTimeout(() => resolve(func(...args)), wait));
 }
 
 /**
- *
- * @returns {chrome | browser} namespace of browser extension api
+ * @returns namespace of browser extension api
  */
-function getBrowser() {
+function getBrowser(): BrowserApi {
   if (typeof chrome !== 'undefined' && typeof chrome.runtime !== 'undefined') {
     return chrome;
   } else if (typeof browser !== 'undefined' && typeof browser.runtime !== 'undefined') {
@@ -110,12 +152,12 @@ function getBrowser() {
 
 /**
  * Returns the difficulty in PascalCase for a given difficulty
- * @param {string} difficulty - The difficulty level as a string: "easy", "medium", "hard", etc.
- * @returns {string} - The difficulty level in PascalCase: "Easy", "Medium", or "Hard" or "Unknown" for unrecognized values.
+ * @param difficulty - The difficulty level as a string: "easy", "medium", "hard", etc.
+ * @returns The difficulty level in PascalCase: "Easy", "Medium", or "Hard" or "Unknown" for unrecognized values.
  */
-function getDifficulty(difficulty) {
-  difficulty &&= difficulty.toUpperCase().trim();
-  return DIFFICULTY[difficulty] ?? DIFFICULTY.UNKNOWN;
+function getDifficulty(difficulty: string): Difficulty {
+  const key = difficulty?.toUpperCase().trim();
+  return (DIFFICULTY as Record<string, Difficulty>)[key] ?? DIFFICULTY.UNKNOWN;
 }
 
 /**
@@ -125,17 +167,21 @@ function getDifficulty(difficulty) {
  * top-level prefix, regardless of the difficulty toggle - a deliberate addition on top
  * of 3.0, not something 3.0 itself does.
  *
- * @param {string} problemSlug - e.g. "0001-two-sum"
- * @param {string} difficulty - PascalCase difficulty, e.g. "Easy" (from getDifficulty())
- * @param {string} languageName - the submission's verbose language name, e.g. "Python3".
+ * @param problemSlug - e.g. "0001-two-sum"
+ * @param difficulty - PascalCase difficulty, e.g. "Easy" (from getDifficulty())
+ * @param languageName - the submission's verbose language name, e.g. "Python3".
  *   Must come from the platform's own language field (LeetCodeV2's `lang.verboseName`, or the
  *   equivalent DOM-sourced name on LeetCodeV1) - never reverse-derived from a file extension,
  *   since `languages` maps name -> extension and multiple names collide on the same extension
  *   (e.g. Pandas and Python3 both -> .py).
- * @param {{folderDifficulty: boolean, folderLanguage: boolean}} settings
- * @returns {string} the problem directory path, e.g. "LeetCode/Python3/Easy/0001-two-sum"
+ * @returns the problem directory path, e.g. "LeetCode/Python3/Easy/0001-two-sum"
  */
-function buildProblemPath(problemSlug, difficulty, languageName, settings) {
+function buildProblemPath(
+  problemSlug: string,
+  difficulty: string,
+  languageName: string,
+  settings: FolderSettings
+): string {
   const { folderDifficulty, folderLanguage } = settings;
   const parts = ['LeetCode'];
   if (folderLanguage) {
@@ -150,19 +196,21 @@ function buildProblemPath(problemSlug, difficulty, languageName, settings) {
 
 /**
  * Substitutes {varName} placeholders in a custom commit message template. Unknown keys are
- * left as literal text rather than stripped or erroring - matches 3.0's real behavior.
- * @param {string} template
- * @param {Object} context - e.g. { date, problemName, problemTopic, difficulty, language, time, space }
- * @returns {string}
+ * left as literal text rather than stripped or erroring - matches 3.0's real behavior. Values
+ * may be undefined (e.g. a problem with no resolved difficulty yet) - stringified the same
+ * way untyped JS string interpolation always did, not silently swapped for empty text.
  */
-function parseCustomCommitMessage(template, context) {
+function parseCustomCommitMessage(
+  template: string,
+  context: Record<string, string | undefined>
+): string {
   return template.replace(/{(\w+)}/g, (match, key) =>
-    Object.hasOwn(context, key) ? context[key] : match
+    Object.hasOwn(context, key) ? String(context[key]) : match
   );
 }
 
 /** Returns today's date as MM-DD-YYYY. */
-function getTodaysDate() {
+function getTodaysDate(): string {
   const d = new Date();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
@@ -170,7 +218,7 @@ function getTodaysDate() {
 }
 
 /** Returns a filename-safe timestamp: MM-DD-YYYY-hh-mm-ss. */
-function getTimestamp() {
+function getTimestamp(): string {
   const d = new Date();
   const hh = String(d.getHours()).padStart(2, '0');
   const min = String(d.getMinutes()).padStart(2, '0');
@@ -179,21 +227,21 @@ function getTimestamp() {
 }
 
 /**
- * Checks if an HTML Collection exists and has elements
- * @param {HTMLCollectionOf<Element>} elem
- * @returns
+ * Checks whether an array-like DOM result (HTMLCollection, NodeList, or a plain array of
+ * strings from a split()) exists and has elements. Generic over anything with a `.length`
+ * since every call site passes a different one of those three shapes.
  */
-function checkElem(elem) {
-  return elem && elem.length > 0;
+function checkElem(elem: { length: number } | null | undefined): boolean {
+  return Boolean(elem && elem.length > 0);
 }
 
-/** @param {string} string @returns {string} problem slug, e.g. 0001-two-sum */
-function convertToSlug(string) {
+/** @returns problem slug, e.g. 0001-two-sum */
+function convertToSlug(str: string): string {
   const a = 'àáâäæãåāăąçćčđďèéêëēėęěğǵḧîïíīįìłḿñńǹňôöòóœøōõőṕŕřßśšşșťțûüùúūǘůűųẃẍÿýžźż·/_,:;';
   const b = 'aaaaaaaaaacccddeeeeeeeegghiiiiiilmnnnnoooooooooprrsssssttuuuuuuuuuwxyyzzz------';
   const p = new RegExp(a.split('').join('|'), 'g');
 
-  return string
+  return str
     .toString()
     .toLowerCase()
     .replace(/\s+/g, '-') // Replace spaces with -
@@ -205,27 +253,32 @@ function convertToSlug(string) {
     .replace(/-+$/, ''); // Trim - from end of text
 }
 
-function addLeadingZeros(title) {
+function addLeadingZeros(title: string): string {
   const maxTitlePrefixLength = 4;
-  var len = title.split('-')[0].length;
+  const len = title.split('-')[0].length;
   if (len < maxTitlePrefixLength) {
     return '0'.repeat(4 - len) + title;
   }
   return title;
 }
 
-function formatStats(time, timePercentile, space, spacePercentile) {
+function formatStats(
+  time: string,
+  timePercentile: string,
+  space: string,
+  spacePercentile: string
+): string {
   return `Time: ${time} (${timePercentile}%), Space: ${space} (${spacePercentile}%) - LeetHub`;
 }
 
 /** Standard GitHub REST API auth headers - shared by every fetch call in this codebase so
  * the header shape lives in exactly one place. */
-function githubHeaders(token) {
+function githubHeaders(token: string): Record<string, string> {
   return { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' };
 }
 
 /** Escapes a string for safe interpolation into an HTML string (e.g. jQuery `.html()`). */
-function escapeHtml(str) {
+function escapeHtml(str: unknown): string {
   return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -236,7 +289,11 @@ function escapeHtml(str) {
 
 /** Fetches one GitHub Contents API entry. Returns the directory listing array for a folder,
  * or the decoded (base64) text content for a file. */
-const fetchRepoContent = async (hook, token, path) => {
+const fetchRepoContent = async (
+  hook: string,
+  token: string,
+  path: string
+): Promise<unknown[] | string> => {
   const res = await fetch(`https://api.github.com/repos/${hook}/contents/${path}`, {
     headers: githubHeaders(token),
   });
@@ -244,6 +301,13 @@ const fetchRepoContent = async (hook, token, path) => {
   const data = await res.json();
   return data.type === 'dir' || Array.isArray(data) ? data : atob(data.content);
 };
+
+interface GitTreeItem {
+  type: string;
+  path: string;
+  mode?: string;
+  sha?: string | null;
+}
 
 /**
  * Recursively walks the linked repo via the Contents API and parses the difficulty out of
@@ -254,8 +318,8 @@ const fetchRepoContent = async (hook, token, path) => {
  * sequential GitHub API calls, which reliably trips GitHub's secondary rate limit and
  * silently produces incomplete/wrong counts.
  */
-async function computeStatsFromReadmes(hook, token) {
-  const counts = { easy: 0, medium: 0, hard: 0 };
+async function computeStatsFromReadmes(hook: string, token: string): Promise<StatsCounts> {
+  const counts: StatsCounts = { easy: 0, medium: 0, hard: 0 };
 
   try {
     const res = await fetch(`https://api.github.com/repos/${hook}/git/trees/HEAD?recursive=1`, {
@@ -265,7 +329,7 @@ async function computeStatsFromReadmes(hook, token) {
     if (!res.ok) return counts;
 
     const data = await res.json();
-    const tree = data?.tree ?? [];
+    const tree: GitTreeItem[] = data?.tree ?? [];
 
     const readmeItems = tree.filter(
       item =>
@@ -281,7 +345,7 @@ async function computeStatsFromReadmes(hook, token) {
         batch.map(async item => {
           try {
             const content = await fetchRepoContent(hook, token, item.path);
-            const match = content.match(/<h3[^>]*>\s*(Easy|Medium|Hard)\s*<\/h3>/i);
+            const match = String(content).match(/<h3[^>]*>\s*(Easy|Medium|Hard)\s*<\/h3>/i);
             if (match) {
               const diff = match[1].toLowerCase();
               if (diff === 'easy' || diff === 'medium' || diff === 'hard') {
@@ -301,12 +365,19 @@ async function computeStatsFromReadmes(hook, token) {
   return counts;
 }
 
-function encodeJsonContent(value) {
+function encodeJsonContent(value: unknown): string {
   return btoa(unescape(encodeURIComponent(JSON.stringify(value, null, 2))));
 }
 
-async function putRepoFile(hook, token, filename, content, message, sha) {
-  const bodyData = { message, content };
+async function putRepoFile(
+  hook: string,
+  token: string,
+  filename: string,
+  content: string,
+  message: string,
+  sha?: string
+): Promise<unknown> {
+  const bodyData: { message: string; content: string; sha?: string } = { message, content };
   if (sha) bodyData.sha = sha;
 
   const res = await fetch(`https://api.github.com/repos/${hook}/contents/${filename}`, {
@@ -345,7 +416,10 @@ const DEFAULT_REPO_README =
  * always just easy+medium+hard, computed where needed, never stored). Returns
  * `{ counts: {easy,medium,hard} }` (numbers) and the sha, or null if it doesn't exist yet or
  * the request fails. */
-async function getRepoStats(hook, token) {
+async function getRepoStats(
+  hook: string,
+  token: string
+): Promise<{ counts: StatsCounts; sha: string } | null> {
   try {
     const res = await fetch(`https://api.github.com/repos/${hook}/contents/${STATS_FILENAME}`, {
       headers: githubHeaders(token),
@@ -369,7 +443,12 @@ async function getRepoStats(hook, token) {
 
 /** Creates or updates stats.json in the linked repo (pass the existing sha to update).
  * Writes exactly `{ easy, medium, hard }` as strings - nothing else. */
-async function putRepoStats(hook, token, counts, sha) {
+async function putRepoStats(
+  hook: string,
+  token: string,
+  counts: StatsCounts,
+  sha?: string
+): Promise<void> {
   try {
     let currentSha = sha;
     if (!currentSha) {
@@ -398,11 +477,11 @@ async function putRepoStats(hook, token, counts, sha) {
 /** Saves { easy, medium, hard } into local storage.stats (deriving `solved` as their sum),
  * keeping the existing sha cache (upload-dedup bookkeeping, local-only, never mirrored to
  * stats.json). */
-async function saveLocalStats(counts) {
+async function saveLocalStats(counts: StatsCounts): Promise<LocalStats> {
   const api = getBrowser();
   const { stats: existing } = await api.storage.local.get('stats');
   const solved = counts.easy + counts.medium + counts.hard;
-  const stats = { ...counts, solved, shas: existing?.shas ?? {} };
+  const stats: LocalStats = { ...counts, solved, shas: existing?.shas ?? {} };
   await api.storage.local.set({ stats });
   return stats;
 }
@@ -417,7 +496,7 @@ async function saveLocalStats(counts) {
  * the expensive README walk exactly once, the same way syncConfigFromRepo already does for
  * config.json - after that first walk, every later popup open is back to the one-call read.
  */
-async function syncStatsFromRepo() {
+async function syncStatsFromRepo(): Promise<LocalStats | null> {
   const api = getBrowser();
   const { leethub_hook, leethub_token } = await api.storage.local.get([
     'leethub_hook',
@@ -444,7 +523,7 @@ async function syncStatsFromRepo() {
  * the moment it's linked (see provisionRepoFiles) and by the manual "Sync Problem Counts"
  * link, when the cached file has drifted from the repo's real state (e.g. problems
  * added/removed outside the extension). */
-async function recomputeStatsFromRepo() {
+async function recomputeStatsFromRepo(): Promise<LocalStats | null> {
   const api = getBrowser();
   const { leethub_hook, leethub_token } = await api.storage.local.get([
     'leethub_hook',
@@ -468,7 +547,7 @@ async function recomputeStatsFromRepo() {
 /** Pushes the current local stats counts to stats.json in the repo - call right after a
  * new problem is pushed, alongside the README-topic-table update, so stats.json stays a
  * running total instead of drifting until the next full recompute. */
-async function pushStatsToRepo() {
+async function pushStatsToRepo(): Promise<void> {
   const api = getBrowser();
   const { leethub_hook, leethub_token } = await api.storage.local.get([
     'leethub_hook',
@@ -478,7 +557,7 @@ async function pushStatsToRepo() {
 
   const { stats } = await api.storage.local.get('stats');
   if (!stats) return;
-  const { easy, medium, hard } = stats;
+  const { easy, medium, hard } = stats as StatsCounts;
 
   const existing = await getRepoStats(leethub_hook, leethub_token);
   await putRepoStats(leethub_hook, leethub_token, { easy, medium, hard }, existing?.sha);
@@ -498,7 +577,10 @@ const SETTINGS_KEYS = [
 
 /** Reads config.json from the linked repo. Returns { config, sha }, or null if it doesn't
  * exist yet or the request fails. */
-async function getRepoConfig(hook, token) {
+async function getRepoConfig(
+  hook: string,
+  token: string
+): Promise<{ config: RepoConfig; sha: string } | null> {
   try {
     const res = await fetch(`https://api.github.com/repos/${hook}/contents/${CONFIG_FILENAME}`, {
       headers: githubHeaders(token),
@@ -513,7 +595,12 @@ async function getRepoConfig(hook, token) {
 }
 
 /** Creates or updates config.json in the linked repo (pass the existing sha to update). */
-async function putRepoConfig(hook, token, config, sha) {
+async function putRepoConfig(
+  hook: string,
+  token: string,
+  config: RepoConfig,
+  sha?: string
+): Promise<void> {
   try {
     let currentSha = sha;
     if (!currentSha) {
@@ -541,7 +628,7 @@ async function putRepoConfig(hook, token, config, sha) {
  * The repo is treated as the source of truth on load - see pushConfigToRepo for the reverse
  * direction (local change -> repo).
  */
-async function syncConfigFromRepo() {
+async function syncConfigFromRepo(): Promise<void> {
   const api = getBrowser();
   const { leethub_hook, leethub_token } = await api.storage.local.get([
     'leethub_hook',
@@ -559,10 +646,11 @@ async function syncConfigFromRepo() {
   await putRepoConfig(leethub_hook, leethub_token, local);
 }
 
-async function ensureRepoReadme(hook, token) {
-  const existing = await fetch(`https://api.github.com/repos/${hook}/contents/${README_FILENAME}`, {
-    headers: githubHeaders(token),
-  });
+async function ensureRepoReadme(hook: string, token: string): Promise<void> {
+  const existing = await fetch(
+    `https://api.github.com/repos/${hook}/contents/${README_FILENAME}`,
+    { headers: githubHeaders(token) }
+  );
 
   if (existing.ok) return;
   if (existing.status !== 404) {
@@ -587,7 +675,7 @@ async function ensureRepoReadme(hook, token) {
  * (recomputeStatsFromRepo) - an empty/fresh repo just sweeps to all zeros, same as 3.0's own
  * default behavior.
  */
-async function provisionRepoFiles() {
+async function provisionRepoFiles(): Promise<LocalStats | null> {
   const api = getBrowser();
   const { leethub_hook, leethub_token } = await api.storage.local.get([
     'leethub_hook',
@@ -603,7 +691,7 @@ async function provisionRepoFiles() {
 
 /** Pushes the current local settings to config.json in the repo - call after any settings
  * change so the repo stays the up to date source of truth. */
-async function pushConfigToRepo() {
+async function pushConfigToRepo(): Promise<void> {
   const api = getBrowser();
   const { leethub_hook, leethub_token } = await api.storage.local.get([
     'leethub_hook',
@@ -628,7 +716,7 @@ async function pushConfigToRepo() {
  * of solves. Assumes the repo's default branch is `main`, matching this codebase's existing
  * convention elsewhere (the topics-README problem links are already hardcoded to `tree/main`).
  */
-async function archiveAndResetStats() {
+async function archiveAndResetStats(): Promise<LocalStats | null> {
   const api = getBrowser();
   const { leethub_hook, leethub_token } = await api.storage.local.get([
     'leethub_hook',
@@ -645,7 +733,7 @@ async function archiveAndResetStats() {
   );
   if (!treeRes.ok) throw new Error(`Failed to read repo tree: HTTP ${treeRes.status}`);
   const treeData = await treeRes.json();
-  const tree = treeData?.tree ?? [];
+  const tree: GitTreeItem[] = treeData?.tree ?? [];
   const baseTreeSha = treeData.sha;
 
   // 2. Current branch head commit - the new commit's parent.
@@ -699,7 +787,7 @@ async function archiveAndResetStats() {
   // place - same blob shas, only the paths change - plus fresh stats.json and README.md blobs
   // at the root. config.json isn't touched, so it's simply not mentioned - base_tree carries it
   // forward.
-  const patch = [];
+  const patch: GitTreeItem[] = [];
   for (const item of tree) {
     if (item.type !== 'blob') continue;
     if (item.path.startsWith('LeetCode/')) {
@@ -786,3 +874,4 @@ export {
   syncStatsFromRepo,
   computeStatsFromReadmes,
 };
+export type { FolderSettings, StatsCounts, LocalStats, RepoConfig, Difficulty };
