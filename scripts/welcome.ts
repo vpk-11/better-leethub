@@ -8,11 +8,12 @@ import {
   syncConfigFromRepo,
   syncStatsFromRepo,
 } from './leetcode/util.js';
+import type { StatsCounts } from './leetcode/util.js';
 
 const api = getBrowser();
 
 /** Renders the reconciled stats returned by stats sync. */
-const renderStats = stats => {
+const renderStats = (stats: (StatsCounts & { solved?: number }) | null | undefined): void => {
   if (!stats) return;
   $('#p_solved').text(stats.solved ?? 0);
   $('#p_solved_easy').text(stats.easy ?? 0);
@@ -21,7 +22,7 @@ const renderStats = stats => {
 };
 
 /* Validates a PAT against the GitHub API. Returns the user object on success, null on failure. */
-const validateToken = async token => {
+const validateToken = async (token: string): Promise<{ login: string } | null> => {
   try {
     const res = await fetch('https://api.github.com/user', {
       headers: githubHeaders(token),
@@ -34,7 +35,10 @@ const validateToken = async token => {
 };
 
 /* Validates repository access against the GitHub API. */
-const validateRepo = async (token, repoHook) => {
+const validateRepo = async (
+  token: string,
+  repoHook: string
+): Promise<{ html_url: string } | null> => {
   try {
     const res = await fetch(`https://api.github.com/repos/${repoHook}`, {
       headers: githubHeaders(token),
@@ -46,7 +50,7 @@ const validateRepo = async (token, repoHook) => {
   }
 };
 
-const showCommitMode = hook => {
+const showCommitMode = (hook: string): void => {
   $('#hook_mode').hide();
   $('#commit_mode').show();
   $('#unlink').show();
@@ -57,13 +61,13 @@ const showCommitMode = hook => {
   );
 };
 
-const showHookMode = () => {
+const showHookMode = (): void => {
   $('#hook_mode').show();
   $('#commit_mode').hide();
   $('#unlink').hide();
 };
 
-const unlinkRepo = () => {
+const unlinkRepo = (): void => {
   api.storage.local.set({ mode_type: 'hook', leethub_hook: null, stats: null }, () => {
     console.log('Unlinked repo and cleared local stats');
     showHookMode();
@@ -74,8 +78,8 @@ const unlinkRepo = () => {
 
 /* On click submit: Handles 2-field form (PAT + Repo Name) connection */
 $('#hook_button').on('click', async () => {
-  const token = $('#pat_input').val().trim();
-  const repoInput = $('#name').val().trim();
+  const token = String($('#pat_input').val()).trim();
+  const repoInput = String($('#name').val()).trim();
 
   if (!token) {
     $('#error').text('Please enter a valid GitHub Personal Access Token.').show();
@@ -166,7 +170,8 @@ $('#sync_config').on('click', async () => {
     $('#sync_status').text('config.json successfully synced with GitHub!').css('color', '#5cb85c');
   } catch (err) {
     console.error('LeetHub: manual sync_config error', err);
-    $('#sync_status').text(`Failed to sync config.json: ${err.message}`).css('color', '#d9534f');
+    const message = err instanceof Error ? err.message : String(err);
+    $('#sync_status').text(`Failed to sync config.json: ${message}`).css('color', '#d9534f');
   }
 });
 
@@ -178,7 +183,8 @@ $('#sync_counts').on('click', async () => {
     $('#sync_status').text('stats.json successfully synced with GitHub!').css('color', '#5cb85c');
   } catch (err) {
     console.error('LeetHub: manual sync_counts error', err);
-    $('#sync_status').text(`Failed to sync stats.json: ${err.message}`).css('color', '#d9534f');
+    const message = err instanceof Error ? err.message : String(err);
+    $('#sync_status').text(`Failed to sync stats.json: ${message}`).css('color', '#d9534f');
   }
 });
 
@@ -201,7 +207,8 @@ $('#archive_reset').on('click', async () => {
       .css('color', '#5cb85c');
   } catch (err) {
     console.error('LeetHub: archive-and-reset error', err);
-    $('#sync_status').text(`Failed to archive and reset: ${err.message}`).css('color', '#d9534f');
+    const message = err instanceof Error ? err.message : String(err);
+    $('#sync_status').text(`Failed to archive and reset: ${message}`).css('color', '#d9534f');
   }
 });
 
@@ -210,7 +217,7 @@ $('#unlink a').on('click', () => {
 });
 
 /* Check current mode on page load */
-const checkModeType = async () => {
+const checkModeType = async (): Promise<void> => {
   const { mode_type, leethub_hook, leethub_token } = await api.storage.local.get([
     'mode_type',
     'leethub_hook',

@@ -1,9 +1,10 @@
 import { escapeHtml, getBrowser } from './leetcode/util.js';
+import type { StatsCounts } from './leetcode/util.js';
 
-let api = getBrowser();
+const api = getBrowser();
 
 /** Renders the reconciled stats returned by a POPUP_SYNC response into the DOM. */
-const renderStats = stats => {
+const renderStats = (stats: (StatsCounts & { solved: number }) | undefined): void => {
   if (!stats) return;
   $('#p_solved').text(stats.solved);
   $('#p_solved_easy').text(stats.easy);
@@ -94,7 +95,7 @@ $('#auto-commit-solution-post').change(function () {
 });
 
 $('#msg-save-btn').click(() => {
-  const commitMessage = $('#custom-commit-msg').val().trim();
+  const commitMessage = String($('#custom-commit-msg').val()).trim();
   api.storage.local.set({ leethub_custom_commit_message: commitMessage }, pushConfigToRepo);
   const successMessage = $('#success-message');
   successMessage.show();
@@ -113,7 +114,7 @@ $('#msg-reset-btn').click(() => {
 /* when a variable button is clicked, add it to the custom commit message text area */
 $('.commit-variable').on('click', function () {
   const variableName = $(this).attr('id');
-  $('#custom-commit-msg').val((index, currentValue) => `${currentValue}{${variableName}} `);
+  $('#custom-commit-msg').val((_index, currentValue) => `${currentValue}{${variableName}} `);
 });
 
 api.storage.local.get('leethub_token', data => {
@@ -148,9 +149,11 @@ api.storage.local.get('leethub_token', data => {
                 // stats paint immediately above, this refreshes them once the background
                 // script's repo walk finishes. Routed through the background script (not
                 // run here directly) so it survives the popup closing mid-fetch.
-                api.runtime.sendMessage({ type: 'POPUP_SYNC' }, response =>
-                  renderStats(response?.stats)
-                );
+                api.runtime
+                  .sendMessage({ type: 'POPUP_SYNC' })
+                  .then((response: { stats?: StatsCounts & { solved: number } }) =>
+                    renderStats(response?.stats)
+                  );
               });
             } else {
               $('#hook_mode').show();
