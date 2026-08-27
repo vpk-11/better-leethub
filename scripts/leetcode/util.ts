@@ -86,40 +86,6 @@ function isEmptyObject(obj: object): boolean {
   return true;
 }
 
-function assert(truthy: unknown, msg?: string): asserts truthy {
-  if (!truthy) {
-    throw new LeetHubError(msg);
-  }
-}
-
-/**
- * Returns a function that can be immediately invoked but will start
- * a timeout of 'wait' milliseconds before it can be called again.
- * @param func to be called after wait
- * @param wait time in ms
- * @param invokeBeforeTimeout true if you want to invoke func before waiting
- */
-function debounce<Args extends unknown[]>(
-  func: (this: unknown, ...args: Args) => void,
-  wait: number,
-  invokeBeforeTimeout?: boolean
-): (this: unknown, ...args: Args) => void {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  return function (this: unknown, ...args: Args) {
-    // func.apply needs the caller's `this` forwarded; that's what this wrapper exists to do.
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const context = this;
-    const later = function () {
-      timeout = undefined;
-      if (!invokeBeforeTimeout) func.apply(context, args);
-    };
-    const callNow = invokeBeforeTimeout && !timeout;
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-    if (callNow) func.apply(context, args);
-  };
-}
-
 /**
  * Delays the execution of a function by the specified time (in milliseconds)
  * and then executes the function with the provided arguments.
@@ -847,11 +813,9 @@ async function archiveAndResetStats(): Promise<LocalStats | null> {
 export {
   addLeadingZeros,
   archiveAndResetStats,
-  assert,
   buildProblemPath,
   checkElem,
   convertToSlug,
-  debounce,
   DEFAULT_REPO_README,
   delay,
   DIFFICULTY,

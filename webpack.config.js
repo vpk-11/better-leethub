@@ -8,7 +8,6 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const entries = ['leetcode', 'welcome'];
 const extensionVersion = process.env.npm_package_version;
 
 // Ignore when copying
@@ -36,7 +35,6 @@ const ignore = [
   '**/scripts/theme.ts',
   '**/manifest-chrome.json',
   '**/manifest-firefox.json',
-  // ...entries.map((entry) => `**/${entry}.js`),
 ];
 
 const folderIgnore = ['**/chrome/**', '**/firefox/**', '**/manifest.json'];
