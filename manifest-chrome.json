@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LeetHub",
-  "description": "Automatically integrate your LeetCode submissions to GitHub",
+  "description": "Automatically syncs your solved problems to GitHub",
   "homepage_url": "https://github.com/vpk-11/LeetHub",
   "version": "__LH_VERSION__",
   "action": {
@@ -17,7 +17,7 @@
   "background": {
     "service_worker": "scripts/background.js"
   },
-  "permissions": ["unlimitedStorage", "storage"],
+  "permissions": ["storage"],
   "content_scripts": [
     {
       "matches": ["https://leetcode.com/*"],

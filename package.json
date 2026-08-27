@@ -2,7 +2,7 @@
   "name": "LeetHub",
   "version": "2.0.9",
   "private": true,
-  "description": "Automatically integrate your code with LeetCode and GitHub",
+  "description": "Automatically syncs your solved problems to GitHub",
   "type": "module",
   "scripts": {
     "dev": "webpack --mode=production --watch",
