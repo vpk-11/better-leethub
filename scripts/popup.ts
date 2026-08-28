@@ -115,10 +115,10 @@ api.storage.local.get('leethub_token', data => {
             }
           });
         } else if (xhr.status === 401) {
-          // bad oAuth
-          // reset token and redirect to authorization process again!
+          // GitHub rejected the stored PAT (expired, revoked, or its scopes changed).
+          // Clear it and drop back to the connect flow so the user can paste a new one.
           api.storage.local.set({ leethub_token: null }, () => {
-            console.log('Bad token. Redirecting back to auth.');
+            console.log('LeetHub: stored PAT rejected by GitHub, clearing it.');
             $('#start_view').show();
           });
         }

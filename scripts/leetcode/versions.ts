@@ -250,7 +250,6 @@ class LeetCodeV1 {
       successTag[0].className === 'success__3Ai7' &&
       (successTag[0] as HTMLElement).innerText.trim() === 'Success'
     ) {
-      console.log(successTag[0]);
       successTag[0].classList.add('marked_as_success');
       return true;
     }
@@ -346,7 +345,7 @@ class LeetCodeV1 {
       elem.innerHTML = `<div id="${this.progressSpinnerElementId}" class="${this.progressSpinnerElementClass}"></div>`;
       this.insertToAnchorElement(elem);
     } catch (error) {
-      console.log(error);
+      console.error(error);
     }
   }
 
@@ -538,7 +537,6 @@ class LeetCodeV2 {
   getSuccessStateAndUpdate(): boolean {
     const successTag = document.querySelectorAll('[data-e2e-locator="submission-result"]');
     if (checkElem(successTag)) {
-      console.log(successTag[0]);
       successTag[0].classList.add('marked_as_success');
       return true;
     }

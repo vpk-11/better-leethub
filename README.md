@@ -2,9 +2,9 @@
 ![Version](https://img.shields.io/badge/version-v4.0.0-blue)
 
 <h1 align="center">
-  <img src="assets/octocode.png" alt="LeetHub - Automatically sync your code to GitHub." width="400">
+  <img src="assets/octocode.png" alt="LeetHub - Automatically syncs your solved problems to GitHub." width="400">
   <br>
-  LeetHub - Automatically sync your code to GitHub.
+  LeetHub - Automatically syncs your solved problems to GitHub.
   <br>
   <br>
 </h1>

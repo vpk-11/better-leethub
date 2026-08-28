@@ -118,7 +118,7 @@ jobs:
 
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Update README version
+      - name: Update version in README and package.json
         if: steps.guard.outputs.skip != 'true'
         run: |
           NEW_VERSION=${{ steps.new.outputs.version }}
@@ -132,10 +132,14 @@ jobs:
             sed -i "/## Changelog/a - **v${NEW_VERSION}** (${DATE}) — ${BUMP_TYPE} bump" README.md
           fi
 
+          # The webpack build stamps the shipped manifest version from package.json,
+          # so it has to move in lockstep with the README marker above.
+          sed -i "s/\"version\": \"[0-9.]*\"/\"version\": \"${NEW_VERSION}\"/" package.json
+
       - name: Commit and push
         if: steps.guard.outputs.skip != 'true'
         run: |
           NEW_VERSION=${{ steps.new.outputs.version }}
-          git add README.md
+          git add README.md package.json
           git diff --staged --quiet || git commit -m "chore: bump version to v${NEW_VERSION} [skip ci]"
           git push

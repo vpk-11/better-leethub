@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LeetHub",
-  "description": "Automatically integrate your LeetCode submissions to GitHub",
+  "description": "Automatically syncs your solved problems to GitHub",
   "homepage_url": "https://github.com/vpk-11/LeetHub",
   "version": "__LH_VERSION__",
   "action": {
@@ -17,7 +17,7 @@
   "background": {
     "scripts": ["scripts/background.js"]
   },
-  "permissions": ["unlimitedStorage", "storage"],
+  "permissions": ["storage"],
   "content_scripts": [
     {
       "matches": ["https://leetcode.com/*"],
@@ -41,7 +41,7 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "leethub@vpk.com",
+      "id": "{fcc577f0-adb7-4cbe-bf6a-bd0b8ceae19c}",
       "strict_min_version": "109.0"
     }
   }
