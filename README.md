@@ -1,19 +1,11 @@
+# Better LeetHub - Automatically syncs your solved problems to GitHub.
 <!-- version: v5.0.0 -->
 ![Version](https://img.shields.io/badge/version-v5.0.0-blue)
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/vpk-11/better-leethub/blob/main/LICENSE)
 
-<h1 align="center">
-  <img src="assets/octocode.png" alt="Better LeetHub - Automatically syncs your solved problems to GitHub." width="400">
-  <br>
-  Better LeetHub - Automatically syncs your solved problems to GitHub.
-  <br>
-  <br>
-</h1>
-
-<p align="center">
-  <a href="https://github.com/vpk-11/better-leethub/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license"/>
-  </a>
-</p>
+<div align="center">
+<img src="assets/octocode.png" alt="Better LeetHub - Automatically syncs your solved problems to GitHub." width="400">
+</div>
 
 ## What is Better LeetHub?
 
