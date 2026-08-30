@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "LeetHub",
+  "name": "Better LeetHub",
   "description": "Automatically syncs your solved problems to GitHub",
-  "homepage_url": "https://github.com/vpk-11/LeetHub",
+  "homepage_url": "https://github.com/vpk-11/better-leethub",
   "version": "__LH_VERSION__",
   "action": {
     "default_icon": "assets/thumbnail.png",

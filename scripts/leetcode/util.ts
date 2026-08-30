@@ -375,7 +375,7 @@ const README_FILENAME = 'README.md';
  * message sits right below the header, inside the section - appendProblemToReadme appends
  * topic tables after whatever's already in the section, so this stays above every table. */
 const DEFAULT_REPO_README =
-  '<!---LeetCode Topics Start-->\n# LeetCode Topics\nThis repository is synced with [LeetHub](https://github.com/vpk-11/LeetHub).\n<!---LeetCode Topics End-->';
+  '<!---LeetCode Topics Start-->\n# LeetCode Topics\nThis repository is synced with [Better LeetHub](https://github.com/vpk-11/better-leethub).\n<!---LeetCode Topics End-->';
 
 /** Reads stats.json from the linked repo. File shape is exactly
  * `{ "easy": "0", "medium": "0", "hard": "0" }` - string values, no "solved" key (that's
