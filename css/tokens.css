@@ -95,16 +95,15 @@
   box-sizing: border-box;
 }
 
-/* --- Brand mark - the rounded { } tile beside the wordmark in the popup/welcome header.
- * No letters (the { } LH lockup is reserved for the standalone app icon, where nothing spells
- * out the name next to it). Fixed colors matching assets/icon.svg - the mark is the same in
- * dark and light, it does not theme-flip. --- */
+/* --- Brand mark - assets/icon.svg (the { } LH app icon) imported as an <img>, same file
+ * everywhere. Fixed art, does not theme-flip; the 1px border keeps the dark tile edge
+ * readable where it sits on the dark popup ground. --- */
 .mark {
   width: 30px;
   height: 30px;
   flex-shrink: 0;
   border-radius: 7px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 /* --- Icon buttons - theme toggle, gear, back arrow, edit pencil --- */
