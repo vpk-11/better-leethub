@@ -55,6 +55,27 @@ const validateToken = async (token: string): Promise<{ login: string } | null> =
   }
 };
 
+/** Extracts `owner/repo` from a full GitHub repository URL. Accepts
+ * `https://github.com/owner/repo`, with or without a trailing `.git` or `/`.
+ * Returns null for anything that isn't a github.com repo URL (a bare repo name,
+ * a non-GitHub host, a URL with no repo segment) so the caller can reject it
+ * with a clear message instead of guessing which account it belongs to. */
+const parseRepoUrl = (input: string): string | null => {
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    return null;
+  }
+  if (url.hostname !== 'github.com' && url.hostname !== 'www.github.com') return null;
+  const parts = url.pathname
+    .replace(/\.git$/, '')
+    .split('/')
+    .filter(Boolean);
+  if (parts.length < 2) return null;
+  return `${parts[0]}/${parts[1]}`;
+};
+
 /* Validates repository access against the GitHub API. */
 const validateRepo = async (
   token: string,
@@ -94,7 +115,7 @@ const unlinkRepo = (): void => {
   });
 };
 
-/* On click submit: Handles 2-field form (PAT + Repo Name) connection */
+/* On click submit: Handles 2-field form (PAT + Repo URL) connection */
 $('#hook_button').on('click', async () => {
   const token = String($('#pat_input').val()).trim();
   const repoInput = String($('#name').val()).trim();
@@ -107,7 +128,17 @@ $('#hook_button').on('click', async () => {
   }
 
   if (!repoInput) {
-    $('#error').text('Please enter the name of your GitHub repository.').show();
+    $('#error').text('Please enter the full URL of your GitHub repository.').show();
+    $('#success').hide();
+    $('#name').focus();
+    return;
+  }
+
+  const fullHook = parseRepoUrl(repoInput);
+  if (!fullHook) {
+    $('#error')
+      .text('Enter the full repository URL, e.g. https://github.com/your-name/your-repo')
+      .show();
     $('#success').hide();
     $('#name').focus();
     return;
@@ -126,7 +157,6 @@ $('#hook_button').on('click', async () => {
   }
 
   const username = user.login;
-  const fullHook = repoInput.includes('/') ? repoInput : `${username}/${repoInput}`;
 
   $('#success').html(`Connecting to <strong>${escapeHtml(fullHook)}</strong>...`).show();
 
@@ -238,7 +268,8 @@ const checkModeType = async (): Promise<void> => {
     $('#pat_input').val(leethub_token);
   }
   if (leethub_hook) {
-    $('#name').val(leethub_hook);
+    // Stored as `owner/repo`; the field now takes a full URL, so show it as one.
+    $('#name').val(`https://github.com/${leethub_hook}`);
   }
 
   if (mode_type === 'commit' && leethub_hook && leethub_token) {

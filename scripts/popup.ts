@@ -28,9 +28,38 @@ wireConfigsEditForm(() => api.runtime.sendMessage({ type: 'PUSH_CONFIG' }));
  * decisions.md). Applies on both Chrome and Firefox. */
 const welcomeUrl = api.runtime.getURL('welcome.html');
 $('#start-connect').attr('href', welcomeUrl);
-$('#start-connect, #settings-link-different-repo, #settings-logout-reauth').on('click', e => {
+$('#start-connect, #settings-link-different-repo').on('click', e => {
   e.preventDefault();
   api.tabs.create({ url: welcomeUrl });
+});
+
+/* Logout: actually clears the session (token + repo link + cached stats) from this
+ * browser, after a confirm. The GitHub repo and its contents are untouched. Opening
+ * welcome.html alone (the old behavior) left the stored PAT in place. */
+$('#settings-logout-reauth').on('click', () => {
+  const confirmed = confirm(
+    'Log out of Better LeetHub? This clears your stored GitHub token and unlinks your ' +
+      'repo from this browser. Your GitHub repo and its contents are not touched. ' +
+      'You will need to paste your token again to reconnect.'
+  );
+  if (!confirmed) return;
+
+  api.storage.local.set(
+    {
+      leethub_token: null,
+      leethub_hook: null,
+      leethub_username: null,
+      repo: null,
+      mode_type: 'hook',
+      stats: null,
+    },
+    () => {
+      $('#commit_mode').hide();
+      $('#popup_settings_view').hide();
+      $('#popup_normal_view').show();
+      $('#start_view').show();
+    }
+  );
 });
 
 /* Gear icon -> Settings view (Level 2: Archive & Reset, Link a Different Repo, Logout/
