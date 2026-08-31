@@ -16,6 +16,7 @@ import {
   isEmptyObject,
   LeetHubError,
   parseCustomCommitMessage,
+  problemSlugOfPath,
   pushStatsToRepo,
   slugFromPath,
   slugsInTree,
@@ -214,7 +215,29 @@ const isCompleted = async (slug: string): Promise<boolean> => {
   const tree = await fetchRepoTree(leethub_hook, leethub_token);
   if (tree.length === 0) return false;
 
-  return slugsInTree(tree).has(slug);
+  if (!slugsInTree(tree).has(slug)) return false;
+
+  // Migrate/refresh the local sha cache from the same tree response - blob shas come back
+  // in it, so this costs no extra call. Idempotent, runs on every positive scan:
+  //  - seeds this slug's files so the next re-solve takes the fast path above;
+  //  - drops any legacy folder-path-keyed entries (they contain "/") left by a pre-
+  //    v3-phase-09 install, so the old path-keyed cache converges to slug-keyed with no
+  //    one-time migration flag.
+  const migrated: Stats = stats != null && !isEmptyObject(stats) ? stats : DEFAULT_STATS();
+  migrated.shas = migrated.shas || {};
+  for (const key of Object.keys(migrated.shas)) {
+    if (key.includes('/')) delete migrated.shas[key];
+  }
+  const slugFiles: ProblemShas = migrated.shas[slug] || {};
+  for (const item of tree) {
+    if (item.type === 'blob' && item.sha && problemSlugOfPath(item.path) === slug) {
+      slugFiles[slugFromPath(item.path)] = item.sha;
+    }
+  }
+  migrated.shas[slug] = slugFiles;
+  await api.storage.local.set({ stats: migrated });
+
+  return true;
 };
 
 /* Discussion posts prepended at top of README */
