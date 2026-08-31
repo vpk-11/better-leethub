@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Create a report to help us improve LeetHub
+about: Create a report to help us improve Better LeetHub
 title: ''
 labels: bug
 assignees: vpk-11

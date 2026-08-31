@@ -1,8 +1,8 @@
 ---
 name: Feature request
-about: What would enhance your LeetHub experience?
+about: What would enhance your Better LeetHub experience?
 title: ''
-labels: ''
+labels: feature
 assignees: ''
 
 ---
