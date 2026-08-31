@@ -362,12 +362,25 @@ async function computeStatsFromReadmes(hook: string, token: string): Promise<Sta
     const tree = await fetchRepoTree(hook, token);
     if (tree.length === 0) return counts;
 
-    const readmeItems = tree.filter(
-      item =>
-        item.type === 'blob' &&
-        item.path.toLowerCase().endsWith('readme.md') &&
-        item.path.toLowerCase() !== 'readme.md'
-    );
+    // One README per problem slug. A repo that accumulated duplicate copies of a problem
+    // under different folder shapes (from a folder-setting toggle before v3-phase-09) would
+    // otherwise tally that problem once per copy. Both copies carry the same
+    // `<h3>{difficulty}</h3>`, so first-seen wins.
+    const seenSlugs = new Set<string>();
+    const readmeItems = tree.filter(item => {
+      if (
+        item.type !== 'blob' ||
+        !item.path.toLowerCase().endsWith('readme.md') ||
+        item.path.toLowerCase() === 'readme.md'
+      ) {
+        return false;
+      }
+      const slug = problemSlugOfPath(item.path);
+      if (slug == null) return true;
+      if (seenSlugs.has(slug)) return false;
+      seenSlugs.add(slug);
+      return true;
+    });
 
     const BATCH_SIZE = 10;
     for (let i = 0; i < readmeItems.length; i += BATCH_SIZE) {

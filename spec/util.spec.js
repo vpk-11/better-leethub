@@ -178,6 +178,36 @@ describe('computeStatsFromReadmes', () => {
     expect(counts.hard).toBe(0);
   });
 
+  it('counts a problem once when the repo has duplicate READMEs for it under different folder shapes', async () => {
+    global.fetch = async url => {
+      if (url.includes('/git/trees/HEAD')) {
+        return {
+          ok: true,
+          json: async () => ({
+            tree: [
+              // same slug, two folder shapes - a leftover from toggling the difficulty
+              // folder setting before v3-phase-09's fix
+              { type: 'blob', path: 'LeetCode/0001-two-sum/README.md' },
+              { type: 'blob', path: 'LeetCode/Easy/0001-two-sum/README.md' },
+              { type: 'blob', path: 'LeetCode/Medium/0002-add-two-numbers/README.md' },
+              { type: 'blob', path: 'README.md' },
+            ],
+          }),
+        };
+      }
+      if (url.includes('0001-two-sum')) {
+        return { ok: true, json: async () => ({ content: btoa('<h3>Easy</h3>') }) };
+      }
+      if (url.includes('0002-add-two-numbers')) {
+        return { ok: true, json: async () => ({ content: btoa('<h3>Medium</h3>') }) };
+      }
+      return { ok: false };
+    };
+
+    const counts = await computeStatsFromReadmes('owner/repo', 'fake-token');
+    expect(counts).toEqual({ easy: 1, medium: 1, hard: 0 });
+  });
+
   it('counts correctly regardless of folder-structure depth (no folders, language-only, language+difficulty)', async () => {
     global.fetch = async url => {
       if (url.includes('/git/trees/HEAD')) {
