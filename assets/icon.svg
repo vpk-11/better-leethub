@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <rect width="128" height="128" rx="38" ry="38" fill="#ff8433"/>
-  <text x="64" y="64" text-anchor="middle" dominant-baseline="central"
-        font-family="'JetBrains Mono','SF Mono',ui-monospace,'DejaVu Sans Mono',monospace"
-        font-weight="700" font-size="60" fill="#1a0e02">{ }</text>
+  <rect width="128" height="128" rx="28" fill="#1a1a1a"/>
+  <g transform="translate(-9 17) scale(0.72)">
+    <path d="M54 26c-9 0-9 8-9 19 0 10-4 14-11 19 7 5 11 9 11 19 0 11 0 19 9 19" fill="none" stroke="#ffa116" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M74 26c9 0 9 8 9 19 0 10 4 14 11 19-7 5-11 9-11 19 0 11 0 19-9 19" fill="none" stroke="#ffa116" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="93" y="67" text-anchor="middle" dominant-baseline="central" font-family="'Manrope','Helvetica Neue',Arial,sans-serif" font-weight="800" font-size="46" fill="#ffffff">LH</text>
 </svg>
