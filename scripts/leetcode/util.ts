@@ -228,6 +228,18 @@ function addLeadingZeros(title: string): string {
   return title;
 }
 
+/**
+ * A problem's stable identity: the slug segment of a repo path
+ * (`LeetCode/Python3/Easy/0001-two-sum` -> `0001-two-sum`). buildProblemPath always puts the
+ * slug last, so this is just the final path segment - the folder shape around it (difficulty
+ * / language / none) doesn't change the identity. A bare filename with no `/` (`README.md`,
+ * a discussion-post `two-sum`) is returned unchanged; those were never problem folders.
+ */
+function slugFromPath(path: string): string {
+  const segments = path.split('/').filter(Boolean);
+  return segments.length > 0 ? segments[segments.length - 1] : path;
+}
+
 function formatStats(
   time: string,
   timePercentile: string,
@@ -831,6 +843,7 @@ export {
   LeetHubError,
   parseCustomCommitMessage,
   pushConfigToRepo,
+  slugFromPath,
   syncConfigFromRepo,
   provisionRepoFiles,
   pushStatsToRepo,

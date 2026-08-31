@@ -16,6 +16,7 @@ import {
   LeetHubError,
   parseCustomCommitMessage,
   pushStatsToRepo,
+  slugFromPath,
 } from './util.js';
 import { appendProblemToReadme, sortTopicsInReadme } from './readmeTopics.js';
 import type { StatsCounts } from './util.js';
@@ -130,22 +131,26 @@ const upload = async (
 
   const body = await res.json();
   //TODO: Think, should we be setting stats state here?
-  const stats = await getAndInitializeStats(problem);
-  stats.shas[problem][filename] = body.content.sha;
+  // stats.shas is keyed by the bare problem slug, not the folder path - the folder shape can
+  // change (difficulty/language toggles) while the problem's identity does not.
+  const slug = slugFromPath(problem);
+  const stats = await getAndInitializeStats(slug);
+  stats.shas[slug][filename] = body.content.sha;
   api.storage.local.set({ stats });
 
   return body.content.sha;
 };
 
-// Returns stats object. If it didn't exist, initializes stats with default difficulty values and initializes the sha object for problem
-const getAndInitializeStats = (problem: string): Promise<Stats> => {
+// Returns stats object. If it didn't exist, initializes stats with default difficulty values
+// and initializes the sha sub-object for the given problem slug.
+const getAndInitializeStats = (slug: string): Promise<Stats> => {
   return api.storage.local.get('stats').then(({ stats }) => {
     if (stats == null || isEmptyObject(stats)) {
       stats = DEFAULT_STATS();
     }
 
-    if (stats.shas[problem] == null) {
-      stats.shas[problem] = {};
+    if (stats.shas[slug] == null) {
+      stats.shas[slug] = {};
     }
 
     return stats as Stats;
@@ -155,10 +160,10 @@ const getAndInitializeStats = (problem: string): Promise<Stats> => {
 /**
  * Increment the statistics for a given problem based on its difficulty.
  * @param difficulty - The difficulty level of the problem, which can be `easy`, `medium`, or `hard`.
- * @param problem - The slug problem name, e.g. `0001-two-sum`
+ * @param slug - The bare problem slug, e.g. `0001-two-sum` (not the folder path).
  * @returns A promise that resolves to the updated statistics object.
  */
-const incrementStats = (difficulty: string | undefined, problem: string): Promise<Stats> => {
+const incrementStats = (difficulty: string | undefined, slug: string): Promise<Stats> => {
   const diff = getDifficulty(difficulty ?? '');
   return api.storage.local.get('stats').then(({ stats }) => {
     if (!stats) {
@@ -169,47 +174,32 @@ const incrementStats = (difficulty: string | undefined, problem: string): Promis
     stats.medium = (stats.medium || 0) + (diff === DIFFICULTY.MEDIUM ? 1 : 0);
     stats.hard = (stats.hard || 0) + (diff === DIFFICULTY.HARD ? 1 : 0);
     stats.shas = stats.shas || {};
-    if (problem) {
-      stats.shas[problem] = stats.shas[problem] || {};
-      stats.shas[problem].difficulty = diff.toLowerCase();
+    if (slug) {
+      stats.shas[slug] = stats.shas[slug] || {};
+      stats.shas[slug].difficulty = diff.toLowerCase();
     }
     api.storage.local.set({ stats });
     return stats as Stats;
   });
 };
 
-const isCompleted = async (problemPath: string): Promise<boolean> => {
-  const { stats, leethub_hook, leethub_token } = await api.storage.local.get([
-    'stats',
-    'leethub_hook',
-    'leethub_token',
-  ]);
+/**
+ * "Has this problem been solved before, under ANY folder shape?" Keyed on the bare problem
+ * slug, never the folder path - so toggling a difficulty/language folder setting and
+ * re-syncing an already-solved problem is recognised, not treated as new.
+ *
+ * @param slug - bare problem slug, e.g. `0001-two-sum`
+ */
+const isCompleted = async (slug: string): Promise<boolean> => {
+  const { stats } = await api.storage.local.get(['stats']);
 
-  if (stats?.shas?.[problemPath]) {
-    const keys = Object.keys(stats.shas[problemPath]);
+  if (stats?.shas?.[slug]) {
+    const keys = Object.keys(stats.shas[slug]);
     if (keys.length > 0) return true;
   }
 
-  if (leethub_hook && leethub_token && problemPath) {
-    try {
-      const res = await fetch(
-        `https://api.github.com/repos/${leethub_hook}/contents/${problemPath}/README.md`,
-        { headers: githubHeaders(leethub_token) }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const existingStats: Stats = stats || DEFAULT_STATS();
-        existingStats.shas = existingStats.shas || {};
-        existingStats.shas[problemPath] = existingStats.shas[problemPath] || {};
-        existingStats.shas[problemPath]['README.md'] = data.sha;
-        await api.storage.local.set({ stats: existingStats });
-        return true;
-      }
-    } catch (_err) {
-      // 404 or network error -> problem README does not exist yet
-    }
-  }
-
+  // The repo-side slug-membership check (a single git-tree scan, replacing the old
+  // single-path README GET) lands in v3-phase-09 section 2.
   return false;
 };
 
@@ -287,11 +277,12 @@ async function uploadGitWith409Retry(
     throw new LeetHubError('NoRepoDefined');
   }
 
-  /* Get SHA, if it exists */
+  /* Get SHA, if it exists. stats.shas is slug-keyed (problemName may be a folder path). */
+  const cacheKey = slugFromPath(problemName);
   const sha = optionals?.sha
     ? optionals.sha
-    : storageData.stats?.shas?.[problemName]?.[filename] !== undefined
-      ? storageData.stats.shas[problemName][filename]
+    : storageData.stats?.shas?.[cacheKey]?.[filename] !== undefined
+      ? storageData.stats.shas[cacheKey][filename]
       : '';
 
   try {
@@ -600,12 +591,12 @@ function loader(leetCode: LeetCodeV1 | LeetCodeV2, suffix?: string): void {
         ? `${problemName}${suffixPart}-${getTimestamp()}${language}`
         : `${problemName}${suffixPart}${language}`;
 
-      const alreadyCompleted = await isCompleted(problemPath);
+      const alreadyCompleted = await isCompleted(problemName);
 
       /* Upload README - write-once: matches 3.0's real behavior, not overwritten on repeat
-         submissions to the same problem. */
+         submissions to the same problem. Keyed on the bare slug, not problemPath. */
       const uploadReadMe = await api.storage.local.get('stats').then(({ stats }) => {
-        const shaExists = stats?.shas?.[problemPath]?.[readmeFilename] !== undefined;
+        const shaExists = stats?.shas?.[problemName]?.[readmeFilename] !== undefined;
 
         if (!shaExists && !alreadyCompleted) {
           return uploadGitWith409Retry(encode(probStatement), problemPath, readmeFilename, readmeMsg);
@@ -656,8 +647,9 @@ function loader(leetCode: LeetCodeV1 | LeetCodeV2, suffix?: string): void {
 
       if (!alreadyCompleted) {
         // Keep stats.json as a running total instead of letting it drift until the next
-        // full recompute (see pushStatsToRepo in util.js).
-        incrementStats(leetCode.difficulty, problemPath).then(pushStatsToRepo);
+        // full recompute (see pushStatsToRepo in util.js). Slug-keyed: a re-solve under a
+        // different folder shape is caught by isCompleted above and never reaches here.
+        incrementStats(leetCode.difficulty, problemName).then(pushStatsToRepo);
       }
     } catch (err) {
       leetCode.markUploadFailed();
