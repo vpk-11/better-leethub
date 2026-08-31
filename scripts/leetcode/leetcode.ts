@@ -7,6 +7,7 @@ import {
   DEFAULT_REPO_README,
   delay,
   DIFFICULTY,
+  fetchRepoTree,
   getBrowser,
   getDifficulty,
   githubHeaders,
@@ -17,6 +18,7 @@ import {
   parseCustomCommitMessage,
   pushStatsToRepo,
   slugFromPath,
+  slugsInTree,
 } from './util.js';
 import { appendProblemToReadme, sortTopicsInReadme } from './readmeTopics.js';
 import type { StatsCounts } from './util.js';
@@ -191,16 +193,28 @@ const incrementStats = (difficulty: string | undefined, slug: string): Promise<S
  * @param slug - bare problem slug, e.g. `0001-two-sum`
  */
 const isCompleted = async (slug: string): Promise<boolean> => {
-  const { stats } = await api.storage.local.get(['stats']);
+  const { stats, leethub_hook, leethub_token } = await api.storage.local.get([
+    'stats',
+    'leethub_hook',
+    'leethub_token',
+  ]);
 
-  if (stats?.shas?.[slug]) {
-    const keys = Object.keys(stats.shas[slug]);
-    if (keys.length > 0) return true;
-  }
+  // Fast path: local slug-keyed cache already knows this problem.
+  if (stats?.shas?.[slug] && Object.keys(stats.shas[slug]).length > 0) return true;
 
-  // The repo-side slug-membership check (a single git-tree scan, replacing the old
-  // single-path README GET) lands in v3-phase-09 section 2.
-  return false;
+  if (!leethub_hook || !leethub_token || !slug) return false;
+
+  // Repo-side check: one git-tree scan for the whole repo, matched on slug membership in
+  // memory. Replaces the old single-path README GET, which could only answer "does this
+  // EXACT path exist" - useless once a problem's folder shape can change. The same scan
+  // also recognises a problem under any older/other-fork layout (bare repo root, no
+  // LeetCode/ prefix, difficulty-only, etc.) with no separate detection logic.
+  // One call per isCompleted() - loader() processes exactly one problem per run, so this
+  // is never inside a per-problem loop.
+  const tree = await fetchRepoTree(leethub_hook, leethub_token);
+  if (tree.length === 0) return false;
+
+  return slugsInTree(tree).has(slug);
 };
 
 /* Discussion posts prepended at top of README */

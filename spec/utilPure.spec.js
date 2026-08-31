@@ -11,6 +11,9 @@ import {
   githubHeaders,
   isEmptyObject,
   parseCustomCommitMessage,
+  problemSlugOfPath,
+  slugFromPath,
+  slugsInTree,
 } from '../scripts/leetcode/util.js';
 
 describe('getDifficulty', () => {
@@ -68,6 +71,85 @@ describe('addLeadingZeros', () => {
 
   it('leaves a 5-digit prefix unchanged (never truncates)', () => {
     expect(addLeadingZeros('12345-foo')).toBe('12345-foo');
+  });
+});
+
+describe('slugFromPath', () => {
+  it('returns the last segment of a folder path', () => {
+    expect(slugFromPath('LeetCode/Python3/Easy/0001-two-sum')).toBe('0001-two-sum');
+    expect(slugFromPath('LeetCode/0001-two-sum')).toBe('0001-two-sum');
+  });
+
+  it('returns a bare name with no slash unchanged', () => {
+    expect(slugFromPath('README.md')).toBe('README.md');
+    expect(slugFromPath('two-sum')).toBe('two-sum');
+  });
+
+  it('ignores a trailing slash', () => {
+    expect(slugFromPath('LeetCode/Easy/0042-foo/')).toBe('0042-foo');
+  });
+});
+
+describe('problemSlugOfPath', () => {
+  it('extracts the slug at any folder depth', () => {
+    expect(problemSlugOfPath('LeetCode/Python3/Easy/0001-two-sum/README.md')).toBe('0001-two-sum');
+    expect(problemSlugOfPath('LeetCode/Easy/0001-two-sum/0001-two-sum.py')).toBe('0001-two-sum');
+    expect(problemSlugOfPath('LeetCode/0001-two-sum/NOTES.md')).toBe('0001-two-sum');
+  });
+
+  it('extracts the slug from a bare repo-root file with no folder (old-fork layout)', () => {
+    expect(problemSlugOfPath('0007-reverse-integer.py')).toBe('0007-reverse-integer');
+    expect(problemSlugOfPath('0007-reverse-integer/README.md')).toBe('0007-reverse-integer');
+  });
+
+  it('normalises an unpadded numeric prefix to the padded identity', () => {
+    expect(problemSlugOfPath('LeetCode/Easy/1-two-sum/README.md')).toBe('0001-two-sum');
+    expect(problemSlugOfPath('12-integer-to-roman/12-integer-to-roman.java')).toBe(
+      '0012-integer-to-roman'
+    );
+  });
+
+  it('returns null for non-problem paths', () => {
+    expect(problemSlugOfPath('README.md')).toBeNull();
+    expect(problemSlugOfPath('config.json')).toBeNull();
+    expect(problemSlugOfPath('stats.json')).toBeNull();
+    expect(problemSlugOfPath('LeetCode/Easy')).toBeNull();
+    expect(problemSlugOfPath('Archive/09-01-2026/README.md')).toBeNull();
+  });
+});
+
+describe('slugsInTree', () => {
+  it('collapses the same slug under different folder shapes to one entry', () => {
+    const tree = [
+      { type: 'blob', path: 'LeetCode/0001-two-sum/README.md' },
+      { type: 'blob', path: 'LeetCode/0001-two-sum/0001-two-sum.py' },
+      { type: 'blob', path: 'LeetCode/Easy/0001-two-sum/README.md' },
+      { type: 'blob', path: 'LeetCode/Python3/Easy/0002-add-two-numbers/README.md' },
+      { type: 'blob', path: '0003-longest-substring.js' },
+      { type: 'blob', path: 'README.md' },
+    ];
+    const slugs = slugsInTree(tree);
+    expect([...slugs].sort()).toEqual([
+      '0001-two-sum',
+      '0002-add-two-numbers',
+      '0003-longest-substring',
+    ]);
+  });
+
+  it('ignores tree (directory) items, only counts blobs', () => {
+    const tree = [
+      { type: 'tree', path: 'LeetCode/0001-two-sum' },
+      { type: 'blob', path: 'LeetCode/0001-two-sum/README.md' },
+    ];
+    expect([...slugsInTree(tree)]).toEqual(['0001-two-sum']);
+  });
+
+  it('is empty for a repo with no problem files', () => {
+    const tree = [
+      { type: 'blob', path: 'README.md' },
+      { type: 'blob', path: 'config.json' },
+    ];
+    expect(slugsInTree(tree).size).toBe(0);
   });
 });
 

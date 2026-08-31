@@ -240,6 +240,32 @@ function slugFromPath(path: string): string {
   return segments.length > 0 ? segments[segments.length - 1] : path;
 }
 
+/** A LeetHub problem-folder segment: `<frontendId>-<kebab-title>`, e.g. `1-two-sum` or
+ * `0001-two-sum`. Digit prefix is universal across LeetHub 1.0/2.0/3.0 and this fork. The
+ * title part must contain a letter - rules out date folders like `09-01-2026` (Archive/). */
+const PROBLEM_SLUG_SEGMENT = /^\d{1,7}-[a-z0-9]+(?:-[a-z0-9]+)*$/i;
+const SLUG_TITLE_HAS_LETTER = /^\d{1,7}-.*[a-z]/i;
+/** Any trailing file extension (`.md`, `.py`, `.cpp`, ...) - a slug never contains a dot. */
+const FILE_EXTENSION = /\.[a-z0-9]{1,6}$/i;
+
+/**
+ * The problem slug a repo path belongs to, or null if it isn't a problem file/folder.
+ * Works at any folder depth (`LeetCode/Python3/Easy/0001-two-sum/README.md`), for a bare
+ * problem folder (`0001-two-sum/README.md`), and for a bare file at the repo root with no
+ * folder at all (`0001-two-sum.py` - older forks, pre-folder-settings layouts). Normalised
+ * through addLeadingZeros so `1-two-sum` and `0001-two-sum` are the same identity.
+ */
+function problemSlugOfPath(path: string): string | null {
+  let slug: string | null = null;
+  for (const rawSeg of path.split('/')) {
+    const seg = rawSeg.replace(FILE_EXTENSION, '');
+    if (PROBLEM_SLUG_SEGMENT.test(seg) && SLUG_TITLE_HAS_LETTER.test(seg)) {
+      slug = addLeadingZeros(seg.toLowerCase());
+    }
+  }
+  return slug;
+}
+
 function formatStats(
   time: string,
   timePercentile: string,
@@ -288,6 +314,39 @@ interface GitTreeItem {
 }
 
 /**
+ * One `git/trees/HEAD?recursive=1` call - the whole repo file tree in a single request.
+ * Returns the blob/tree item array, or `[]` on any failure (callers read "couldn't fetch the
+ * tree" as "problem not found" / "nothing to reconcile", never as an error to surface).
+ * Call this ONCE per sync operation and check the result in memory - never once per problem.
+ */
+async function fetchRepoTree(hook: string, token: string): Promise<GitTreeItem[]> {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${hook}/git/trees/HEAD?recursive=1`, {
+      headers: githubHeaders(token),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data?.tree ?? [];
+  } catch (err) {
+    console.error('LeetHub: failed to read repo tree', err);
+    return [];
+  }
+}
+
+/** Every problem slug present anywhere in a git tree, at any folder depth, normalised. Lets
+ * "is this problem already solved" be answered against the whole repo in memory after one
+ * fetchRepoTree call - independent of the folder shape the problem happens to sit in. */
+function slugsInTree(tree: GitTreeItem[]): Set<string> {
+  const slugs = new Set<string>();
+  for (const item of tree) {
+    if (item.type !== 'blob') continue;
+    const slug = problemSlugOfPath(item.path);
+    if (slug) slugs.add(slug);
+  }
+  return slugs;
+}
+
+/**
  * Recursively walks the linked repo via the Contents API and parses the difficulty out of
  * every per-problem README.md's `<h3>{difficulty}</h3>` tag - the expensive path (one
  * network request per problem). Only ever called once, when a repo is first linked (see
@@ -300,14 +359,8 @@ async function computeStatsFromReadmes(hook: string, token: string): Promise<Sta
   const counts: StatsCounts = { easy: 0, medium: 0, hard: 0 };
 
   try {
-    const res = await fetch(`https://api.github.com/repos/${hook}/git/trees/HEAD?recursive=1`, {
-      headers: githubHeaders(token),
-    });
-
-    if (!res.ok) return counts;
-
-    const data = await res.json();
-    const tree: GitTreeItem[] = data?.tree ?? [];
+    const tree = await fetchRepoTree(hook, token);
+    if (tree.length === 0) return counts;
 
     const readmeItems = tree.filter(
       item =>
@@ -832,6 +885,7 @@ export {
   delay,
   DIFFICULTY,
   escapeHtml,
+  fetchRepoTree,
   formatStats,
   getBrowser,
   getDifficulty,
@@ -842,8 +896,10 @@ export {
   languages,
   LeetHubError,
   parseCustomCommitMessage,
+  problemSlugOfPath,
   pushConfigToRepo,
   slugFromPath,
+  slugsInTree,
   syncConfigFromRepo,
   provisionRepoFiles,
   pushStatsToRepo,
