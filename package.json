@@ -1,6 +1,6 @@
 {
   "name": "better-leethub",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "private": true,
   "description": "Automatically syncs your solved problems to GitHub",
   "type": "module",

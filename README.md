@@ -1,6 +1,6 @@
 # Better LeetHub - Automatically syncs your solved problems to GitHub.
-<!-- version: v5.1.0 -->
-![Version](https://img.shields.io/badge/version-v5.1.0-blue)
+<!-- version: v5.2.0 -->
+![Version](https://img.shields.io/badge/version-v5.2.0-blue)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/vpk-11/better-leethub/blob/main/LICENSE)
 
 <div align="center">
@@ -93,6 +93,7 @@ Better LeetHub builds on two upstream projects:
 - [raphaelheinz/LeetHub-3.0](https://github.com/raphaelheinz/LeetHub-3.0) - the source for this fork's feature/scraper layer (folder structure, commit templating, submission detection).
 
 ## Changelog
+- **v5.2.0** (2026-09-03) — minor bump
 - **v5.0.0** (2026-08-28) — major bump
 - **v4.0.0** (2026-08-25) — major bump
 - **v3.0.0** (2026-08-24) — major bump
