@@ -194,15 +194,20 @@ const incrementStats = (difficulty: string | undefined, slug: string): Promise<S
  * slug; the folder it happens to sit in is not, so this is what "already solved" keys on
  * now, never the constructed path.
  *
+ * Returns the folder path (`''` for a pre-fork bare-root file), `null` when the slug is
+ * confirmed absent, or `undefined` when the repo tree couldn't be read at all - the caller
+ * must not treat that last case as "new" or a transient GitHub error double-counts stats.
+ *
  * @param slug - bare problem slug, e.g. `0001-two-sum`
  */
-const findExistingProblemDir = async (slug: string): Promise<string | null> => {
+const findExistingProblemDir = async (slug: string): Promise<string | null | undefined> => {
   const { leethub_hook, leethub_token } = await api.storage.local.get([
     'leethub_hook',
     'leethub_token',
   ]);
   if (!leethub_hook || !leethub_token || !slug) return null;
   const tree = await fetchRepoTree(leethub_hook, leethub_token);
+  if (tree == null) return undefined;
   return problemDirInTree(tree, slug);
 };
 
@@ -597,11 +602,15 @@ function loader(leetCode: LeetCodeV1 | LeetCodeV2, suffix?: string): void {
       /* Identity is the slug, not the path. If this problem is already in the repo (under
          any folder shape, including an older/other-fork layout), re-solving writes back to
          where it already lives and never re-counts it - so toggling a folder setting and
-         re-syncing can't fork a duplicate under the new shape. A pre-fork bare-repo-root
-         file (existingDir === '') is the one case left to the fresh path, so the re-solve
-         lands in a proper LeetCode/ folder. */
+         re-syncing can't fork a duplicate under the new shape. Two cases still take the
+         fresh path with a full README + stats write: a pre-fork bare-repo-root file
+         (existingDir === '', so the re-solve lands in a proper LeetCode/ folder), and a
+         confirmed-new problem (existingDir === null). When the repo tree can't be read
+         (existingDir === undefined) we upload but leave stats alone - a transient GitHub
+         error must not double-count. */
       const existingDir = await findExistingProblemDir(problemName);
-      const alreadyCompleted = existingDir !== null;
+      const treeUnavailable = existingDir === undefined;
+      const alreadyCompleted = typeof existingDir === 'string' && existingDir !== '';
       const problemPath = existingDir ? existingDir : freshPath;
 
       /* Upload README - write-once: not overwritten on repeat submissions to the same
@@ -652,11 +661,11 @@ function loader(leetCode: LeetCodeV1 | LeetCodeV2, suffix?: string): void {
 
       leetCode.markUploaded();
 
-      if (!alreadyCompleted) {
+      if (!alreadyCompleted && !treeUnavailable) {
         // Keep stats.json as a running total instead of letting it drift until the next
         // full recompute (see pushStatsToRepo in util.js). Slug-keyed: a re-solve under a
-        // different folder shape resolves to a non-null existingDir above and never gets
-        // here.
+        // different folder shape resolves to a real existingDir above and never gets here.
+        // Skipped when the repo tree was unreadable - can't tell new from already-solved.
         incrementStats(leetCode.difficulty, problemName).then(pushStatsToRepo);
       }
     } catch (err) {

@@ -208,6 +208,31 @@ describe('computeStatsFromReadmes', () => {
     expect(counts).toEqual({ easy: 1, medium: 1, hard: 0 });
   });
 
+  it('does not tally per-problem READMEs parked under Archive/ (post Archive & Reset)', async () => {
+    global.fetch = async url => {
+      if (url.includes('/git/trees/HEAD')) {
+        return {
+          ok: true,
+          json: async () => ({
+            tree: [
+              { type: 'blob', path: 'LeetCode/Easy/0001-two-sum/README.md' },
+              { type: 'blob', path: 'Archive/09-01-2026/LeetCode/Hard/0004-median/README.md' },
+              { type: 'blob', path: 'Archive/09-01-2026/LeetCode/Medium/0002-add/README.md' },
+            ],
+          }),
+        };
+      }
+      if (url.includes('0001-two-sum')) {
+        return { ok: true, json: async () => ({ content: btoa('<h3>Easy</h3>') }) };
+      }
+      // archived READMEs still carry a difficulty tag - they must not be fetched or counted
+      return { ok: true, json: async () => ({ content: btoa('<h3>Hard</h3>') }) };
+    };
+
+    const counts = await computeStatsFromReadmes('owner/repo', 'fake-token');
+    expect(counts).toEqual({ easy: 1, medium: 0, hard: 0 });
+  });
+
   it('counts correctly regardless of folder-structure depth (no folders, language-only, language+difficulty)', async () => {
     global.fetch = async url => {
       if (url.includes('/git/trees/HEAD')) {

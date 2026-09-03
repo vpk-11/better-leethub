@@ -88,6 +88,12 @@ describe('slugFromPath', () => {
   it('ignores a trailing slash', () => {
     expect(slugFromPath('LeetCode/Easy/0042-foo/')).toBe('0042-foo');
   });
+
+  it('normalises an unpadded numeric prefix so it keys stats.shas under one identity', () => {
+    expect(slugFromPath('LeetCode/Easy/1-two-sum')).toBe('0001-two-sum');
+    expect(slugFromPath('12-integer-to-roman')).toBe('0012-integer-to-roman');
+    expect(slugFromPath('LeetCode/1-two-sum/1-two-sum.py')).toBe('0001-two-sum');
+  });
 });
 
 describe('problemSlugOfPath', () => {
@@ -115,6 +121,13 @@ describe('problemSlugOfPath', () => {
     expect(problemSlugOfPath('stats.json')).toBeNull();
     expect(problemSlugOfPath('LeetCode/Easy')).toBeNull();
     expect(problemSlugOfPath('Archive/09-01-2026/README.md')).toBeNull();
+  });
+
+  it('returns null for a problem file parked under Archive/ (out of play after Archive & Reset)', () => {
+    expect(
+      problemSlugOfPath('Archive/09-01-2026/LeetCode/Easy/0001-two-sum/README.md')
+    ).toBeNull();
+    expect(problemSlugOfPath('Archive/09-01-2026/0001-two-sum.py')).toBeNull();
   });
 });
 
@@ -154,6 +167,22 @@ describe('problemDirInTree', () => {
       { type: 'blob', path: 'config.json' },
     ];
     expect(problemDirInTree(tree, '0001-two-sum')).toBeNull();
+  });
+
+  it('does not match a copy parked under Archive/ - a re-solve after Archive & Reset is new', () => {
+    const tree = [
+      { type: 'blob', path: 'Archive/09-01-2026/LeetCode/Easy/0001-two-sum/README.md' },
+      { type: 'blob', path: 'Archive/09-01-2026/LeetCode/Easy/0001-two-sum/0001-two-sum.py' },
+    ];
+    expect(problemDirInTree(tree, '0001-two-sum')).toBeNull();
+  });
+
+  it('picks the live copy when an archived copy of the same slug also exists', () => {
+    const tree = [
+      { type: 'blob', path: 'Archive/09-01-2026/LeetCode/0001-two-sum/README.md' },
+      { type: 'blob', path: 'LeetCode/Easy/0001-two-sum/README.md' },
+    ];
+    expect(problemDirInTree(tree, '0001-two-sum')).toBe('LeetCode/Easy/0001-two-sum');
   });
 });
 

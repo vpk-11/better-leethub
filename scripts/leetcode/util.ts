@@ -237,7 +237,13 @@ function addLeadingZeros(title: string): string {
  */
 function slugFromPath(path: string): string {
   const segments = path.split('/').filter(Boolean);
-  return segments.length > 0 ? segments[segments.length - 1] : path;
+  const last = segments.length > 0 ? segments[segments.length - 1] : path;
+  const bare = last.replace(FILE_EXTENSION, '');
+  // Key on the same padded identity problemSlugOfPath produces, so a legacy unpadded
+  // folder (`1-two-sum`) writes stats.shas under the slug every other path already uses.
+  return PROBLEM_SLUG_SEGMENT.test(bare) && SLUG_TITLE_HAS_LETTER.test(bare)
+    ? addLeadingZeros(bare.toLowerCase())
+    : last;
 }
 
 /** A LeetHub problem-folder segment: `<frontendId>-<kebab-title>`, e.g. `1-two-sum` or
@@ -256,6 +262,9 @@ const FILE_EXTENSION = /\.[a-z0-9]{1,6}$/i;
  * through addLeadingZeros so `1-two-sum` and `0001-two-sum` are the same identity.
  */
 function problemSlugOfPath(path: string): string | null {
+  // Anything parked under Archive/ (from an Archive & Reset) is out of play: it must never
+  // read as "already solved" for the re-solve redirect, nor be tallied by a stats recount.
+  if (path.split('/')[0] === 'Archive') return null;
   let slug: string | null = null;
   for (const rawSeg of path.split('/')) {
     const seg = rawSeg.replace(FILE_EXTENSION, '');
@@ -315,21 +324,22 @@ interface GitTreeItem {
 
 /**
  * One `git/trees/HEAD?recursive=1` call - the whole repo file tree in a single request.
- * Returns the blob/tree item array, or `[]` on any failure (callers read "couldn't fetch the
- * tree" as "problem not found" / "nothing to reconcile", never as an error to surface).
+ * Returns the blob/tree item array (`[]` for a genuinely empty repo), or `null` when the
+ * tree couldn't be fetched at all - a transient GitHub error must NOT read as "problem not
+ * found", or a re-solve would fork a duplicate and double-count stats. Callers decide.
  * Call this ONCE per sync operation and check the result in memory - never once per problem.
  */
-async function fetchRepoTree(hook: string, token: string): Promise<GitTreeItem[]> {
+async function fetchRepoTree(hook: string, token: string): Promise<GitTreeItem[] | null> {
   try {
     const res = await fetch(`https://api.github.com/repos/${hook}/git/trees/HEAD?recursive=1`, {
       headers: githubHeaders(token),
     });
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     const data = await res.json();
     return data?.tree ?? [];
   } catch (err) {
     console.error('LeetHub: failed to read repo tree', err);
-    return [];
+    return null;
   }
 }
 
@@ -365,7 +375,7 @@ async function computeStatsFromReadmes(hook: string, token: string): Promise<Sta
 
   try {
     const tree = await fetchRepoTree(hook, token);
-    if (tree.length === 0) return counts;
+    if (tree == null || tree.length === 0) return counts;
 
     // One README per problem slug. A repo that accumulated duplicate copies of a problem
     // under different folder shapes (from a folder-setting toggle before v3-phase-09) would
@@ -381,7 +391,7 @@ async function computeStatsFromReadmes(hook: string, token: string): Promise<Sta
         return false;
       }
       const slug = problemSlugOfPath(item.path);
-      if (slug == null) return true;
+      if (slug == null) return false; // a README that resolves to no problem slug isn't one
       if (seenSlugs.has(slug)) return false;
       seenSlugs.add(slug);
       return true;
