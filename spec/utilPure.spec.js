@@ -11,9 +11,9 @@ import {
   githubHeaders,
   isEmptyObject,
   parseCustomCommitMessage,
+  problemDirInTree,
   problemSlugOfPath,
   slugFromPath,
-  slugsInTree,
 } from '../scripts/leetcode/util.js';
 
 describe('getDifficulty', () => {
@@ -118,38 +118,42 @@ describe('problemSlugOfPath', () => {
   });
 });
 
-describe('slugsInTree', () => {
-  it('collapses the same slug under different folder shapes to one entry', () => {
+describe('problemDirInTree', () => {
+  it('returns the folder a solved slug sits in, whatever the folder shape', () => {
     const tree = [
-      { type: 'blob', path: 'LeetCode/0001-two-sum/README.md' },
-      { type: 'blob', path: 'LeetCode/0001-two-sum/0001-two-sum.py' },
-      { type: 'blob', path: 'LeetCode/Easy/0001-two-sum/README.md' },
       { type: 'blob', path: 'LeetCode/Python3/Easy/0002-add-two-numbers/README.md' },
-      { type: 'blob', path: '0003-longest-substring.js' },
-      { type: 'blob', path: 'README.md' },
+      { type: 'blob', path: 'LeetCode/Python3/Easy/0002-add-two-numbers/0002-add-two-numbers.py' },
     ];
-    const slugs = slugsInTree(tree);
-    expect([...slugs].sort()).toEqual([
-      '0001-two-sum',
-      '0002-add-two-numbers',
-      '0003-longest-substring',
-    ]);
+    expect(problemDirInTree(tree, '0002-add-two-numbers')).toBe(
+      'LeetCode/Python3/Easy/0002-add-two-numbers'
+    );
   });
 
-  it('ignores tree (directory) items, only counts blobs', () => {
+  it('returns the first match when the repo carries duplicate copies of a slug', () => {
+    const tree = [
+      { type: 'blob', path: 'LeetCode/0001-two-sum/README.md' },
+      { type: 'blob', path: 'LeetCode/Easy/0001-two-sum/README.md' },
+    ];
+    expect(problemDirInTree(tree, '0001-two-sum')).toBe('LeetCode/0001-two-sum');
+  });
+
+  it("returns '' for a pre-fork bare file at the repo root", () => {
+    const tree = [{ type: 'blob', path: '0007-reverse-integer.py' }];
+    expect(problemDirInTree(tree, '0007-reverse-integer')).toBe('');
+  });
+
+  it('normalises an unpadded prefix so 1-two-sum and 0001-two-sum are one identity', () => {
+    const tree = [{ type: 'blob', path: 'LeetCode/Easy/1-two-sum/README.md' }];
+    expect(problemDirInTree(tree, '0001-two-sum')).toBe('LeetCode/Easy/1-two-sum');
+  });
+
+  it('ignores tree (directory) items and returns null when the slug is absent', () => {
     const tree = [
       { type: 'tree', path: 'LeetCode/0001-two-sum' },
-      { type: 'blob', path: 'LeetCode/0001-two-sum/README.md' },
-    ];
-    expect([...slugsInTree(tree)]).toEqual(['0001-two-sum']);
-  });
-
-  it('is empty for a repo with no problem files', () => {
-    const tree = [
       { type: 'blob', path: 'README.md' },
       { type: 'blob', path: 'config.json' },
     ];
-    expect(slugsInTree(tree).size).toBe(0);
+    expect(problemDirInTree(tree, '0001-two-sum')).toBeNull();
   });
 });
 

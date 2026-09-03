@@ -333,17 +333,22 @@ async function fetchRepoTree(hook: string, token: string): Promise<GitTreeItem[]
   }
 }
 
-/** Every problem slug present anywhere in a git tree, at any folder depth, normalised. Lets
- * "is this problem already solved" be answered against the whole repo in memory after one
- * fetchRepoTree call - independent of the folder shape the problem happens to sit in. */
-function slugsInTree(tree: GitTreeItem[]): Set<string> {
-  const slugs = new Set<string>();
+/**
+ * The repo directory a given problem slug already lives in (any folder shape, including a
+ * bare file at the repo root -> ''), or null if the slug isn't anywhere in the tree. Answers
+ * both "is this problem already solved" and "where does it already sit" from one in-memory
+ * scan of a single fetchRepoTree call - independent of the folder shape the problem happens
+ * to occupy, so an older/other-fork layout is recognised with no separate detection logic.
+ * First match wins; a repo that already carried duplicate copies of a problem from before
+ * this fix is not reorganised here.
+ */
+function problemDirInTree(tree: GitTreeItem[], slug: string): string | null {
   for (const item of tree) {
-    if (item.type !== 'blob') continue;
-    const slug = problemSlugOfPath(item.path);
-    if (slug) slugs.add(slug);
+    if (item.type === 'blob' && problemSlugOfPath(item.path) === slug) {
+      return item.path.split('/').slice(0, -1).join('/');
+    }
   }
-  return slugs;
+  return null;
 }
 
 /**
@@ -909,10 +914,10 @@ export {
   languages,
   LeetHubError,
   parseCustomCommitMessage,
+  problemDirInTree,
   problemSlugOfPath,
   pushConfigToRepo,
   slugFromPath,
-  slugsInTree,
   syncConfigFromRepo,
   provisionRepoFiles,
   pushStatsToRepo,

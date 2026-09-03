@@ -16,10 +16,9 @@ import {
   isEmptyObject,
   LeetHubError,
   parseCustomCommitMessage,
-  problemSlugOfPath,
+  problemDirInTree,
   pushStatsToRepo,
   slugFromPath,
-  slugsInTree,
 } from './util.js';
 import { appendProblemToReadme, sortTopicsInReadme } from './readmeTopics.js';
 import type { StatsCounts } from './util.js';
@@ -187,57 +186,24 @@ const incrementStats = (difficulty: string | undefined, slug: string): Promise<S
 };
 
 /**
- * "Has this problem been solved before, under ANY folder shape?" Keyed on the bare problem
- * slug, never the folder path - so toggling a difficulty/language folder setting and
- * re-syncing an already-solved problem is recognised, not treated as new.
+ * The repo directory a previously-solved problem already occupies, or null if this slug
+ * isn't in the repo yet. One git-tree scan (loader() runs once per submission, so this is
+ * never inside a per-problem loop). Matches the slug under ANY folder shape - a
+ * difficulty/language-prefixed path, a bare `LeetCode/<slug>` path, or a pre-fork file at
+ * the repo root - with no separate fork-detection logic. The problem's identity is its
+ * slug; the folder it happens to sit in is not, so this is what "already solved" keys on
+ * now, never the constructed path.
  *
  * @param slug - bare problem slug, e.g. `0001-two-sum`
  */
-const isCompleted = async (slug: string): Promise<boolean> => {
-  const { stats, leethub_hook, leethub_token } = await api.storage.local.get([
-    'stats',
+const findExistingProblemDir = async (slug: string): Promise<string | null> => {
+  const { leethub_hook, leethub_token } = await api.storage.local.get([
     'leethub_hook',
     'leethub_token',
   ]);
-
-  // Fast path: local slug-keyed cache already knows this problem.
-  if (stats?.shas?.[slug] && Object.keys(stats.shas[slug]).length > 0) return true;
-
-  if (!leethub_hook || !leethub_token || !slug) return false;
-
-  // Repo-side check: one git-tree scan for the whole repo, matched on slug membership in
-  // memory. Replaces the old single-path README GET, which could only answer "does this
-  // EXACT path exist" - useless once a problem's folder shape can change. The same scan
-  // also recognises a problem under any older/other-fork layout (bare repo root, no
-  // LeetCode/ prefix, difficulty-only, etc.) with no separate detection logic.
-  // One call per isCompleted() - loader() processes exactly one problem per run, so this
-  // is never inside a per-problem loop.
+  if (!leethub_hook || !leethub_token || !slug) return null;
   const tree = await fetchRepoTree(leethub_hook, leethub_token);
-  if (tree.length === 0) return false;
-
-  if (!slugsInTree(tree).has(slug)) return false;
-
-  // Migrate/refresh the local sha cache from the same tree response - blob shas come back
-  // in it, so this costs no extra call. Idempotent, runs on every positive scan:
-  //  - seeds this slug's files so the next re-solve takes the fast path above;
-  //  - drops any legacy folder-path-keyed entries (they contain "/") left by a pre-
-  //    v3-phase-09 install, so the old path-keyed cache converges to slug-keyed with no
-  //    one-time migration flag.
-  const migrated: Stats = stats != null && !isEmptyObject(stats) ? stats : DEFAULT_STATS();
-  migrated.shas = migrated.shas || {};
-  for (const key of Object.keys(migrated.shas)) {
-    if (key.includes('/')) delete migrated.shas[key];
-  }
-  const slugFiles: ProblemShas = migrated.shas[slug] || {};
-  for (const item of tree) {
-    if (item.type === 'blob' && item.sha && problemSlugOfPath(item.path) === slug) {
-      slugFiles[slugFromPath(item.path)] = item.sha;
-    }
-  }
-  migrated.shas[slug] = slugFiles;
-  await api.storage.local.set({ stats: migrated });
-
-  return true;
+  return problemDirInTree(tree, slug);
 };
 
 /* Discussion posts prepended at top of README */
@@ -619,7 +585,7 @@ function loader(leetCode: LeetCodeV1 | LeetCodeV2, suffix?: string): void {
         'leethub_use_language_folder',
         'leethub_use_timestamp_filename',
       ]);
-      const problemPath = buildProblemPath(problemName, leetCode.difficulty ?? '', languageName, {
+      const freshPath = buildProblemPath(problemName, leetCode.difficulty ?? '', languageName, {
         folderDifficulty: !!leethub_use_difficulty_folder,
         folderLanguage: !!leethub_use_language_folder,
       });
@@ -628,17 +594,21 @@ function loader(leetCode: LeetCodeV1 | LeetCodeV2, suffix?: string): void {
         ? `${problemName}${suffixPart}-${getTimestamp()}${language}`
         : `${problemName}${suffixPart}${language}`;
 
-      const alreadyCompleted = await isCompleted(problemName);
+      /* Identity is the slug, not the path. If this problem is already in the repo (under
+         any folder shape, including an older/other-fork layout), re-solving writes back to
+         where it already lives and never re-counts it - so toggling a folder setting and
+         re-syncing can't fork a duplicate under the new shape. A pre-fork bare-repo-root
+         file (existingDir === '') is the one case left to the fresh path, so the re-solve
+         lands in a proper LeetCode/ folder. */
+      const existingDir = await findExistingProblemDir(problemName);
+      const alreadyCompleted = existingDir !== null;
+      const problemPath = existingDir ? existingDir : freshPath;
 
-      /* Upload README - write-once: matches 3.0's real behavior, not overwritten on repeat
-         submissions to the same problem. Keyed on the bare slug, not problemPath. */
-      const uploadReadMe = await api.storage.local.get('stats').then(({ stats }) => {
-        const shaExists = stats?.shas?.[problemName]?.[readmeFilename] !== undefined;
-
-        if (!shaExists && !alreadyCompleted) {
-          return uploadGitWith409Retry(encode(probStatement), problemPath, readmeFilename, readmeMsg);
-        }
-      });
+      /* Upload README - write-once: not overwritten on repeat submissions to the same
+         problem (3.0's real behavior). */
+      const uploadReadMe = alreadyCompleted
+        ? undefined
+        : uploadGitWith409Retry(encode(probStatement), problemPath, readmeFilename, readmeMsg);
 
       /* Upload Notes if any*/
       const notes = leetCode.getNotesIfAny();
@@ -685,7 +655,8 @@ function loader(leetCode: LeetCodeV1 | LeetCodeV2, suffix?: string): void {
       if (!alreadyCompleted) {
         // Keep stats.json as a running total instead of letting it drift until the next
         // full recompute (see pushStatsToRepo in util.js). Slug-keyed: a re-solve under a
-        // different folder shape is caught by isCompleted above and never reaches here.
+        // different folder shape resolves to a non-null existingDir above and never gets
+        // here.
         incrementStats(leetCode.difficulty, problemName).then(pushStatsToRepo);
       }
     } catch (err) {
