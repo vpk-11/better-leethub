@@ -9,6 +9,17 @@ on:
       - closed
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      level:
+        description: "Bump level (auto = classify from the changed files)"
+        type: choice
+        default: auto
+        options:
+          - auto
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
@@ -16,6 +27,7 @@ permissions:
 jobs:
   version-bump:
     if: |
+      github.event_name == 'workflow_dispatch' ||
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
 
@@ -33,96 +45,110 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Skip if push is a PR merge commit or non-code-only
-        id: guard
-        if: github.event_name == 'push'
+      # Decide the bump level for this run:
+      #   major  - a PR was merged into main (or dispatched with level=major)
+      #   minor  - a push to main that changed real source (scripts/, css/, *.html,
+      #            manifests, package.json, webpack/tsconfig, ...)
+      #   patch  - a push to main whose only non-generated changes are tests (spec/),
+      #            assets (assets/), docs (*.md), CI (.github/), or LICENSE
+      #   skip   - nothing changed outside dist/ and graphify-out/ (generated output),
+      #            or the push is the merge commit of a PR (the pull_request event
+      #            handles that one as a major)
+      - name: Classify
+        id: cls
         run: |
-          # A PR merge produces a merge commit with 2 parents. A squash merge
-          # produces a single-parent commit whose message GitHub defaults to
-          # "<PR title> (#<number>)" — check both, since parent count alone
-          # misses squash merges. Rebase merges land as multiple individual
-          # single-parent commits with no such marker and are NOT caught here —
-          # known gap, not solved by this guard.
-          PARENT_COUNT=$(git log -1 --format="%P" HEAD | wc -w)
-          COMMIT_MSG=$(git log -1 --format="%s" HEAD)
-          if [ "$PARENT_COUNT" -gt "1" ] || echo "$COMMIT_MSG" | grep -qE "\(#[0-9]+\)\$"; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-            echo "Merge commit detected — skipping push bump, PR event will handle major bump."
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "level=major" >> "$GITHUB_OUTPUT"
+            echo "PR merge -> major"
             exit 0
           fi
 
-          # Skip if all changed files are under dist/ (build output) or
-          # graphify-out/ (generated knowledge graph output).
-          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
-          NON_GENERATED=$(echo "$CHANGED" | grep -v '^dist/' | grep -v '^graphify-out/' | grep -v '^$' || true)
-          if [ -z "$NON_GENERATED" ]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-            echo "Only generated files changed — skipping version bump."
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.level }}" != "auto" ]; then
+            echo "level=${{ inputs.level }}" >> "$GITHUB_OUTPUT"
+            echo "manual dispatch -> ${{ inputs.level }}"
+            exit 0
           fi
 
-      - name: Read current version from README
-        id: current
-        if: steps.guard.outputs.skip != 'true'
-        run: |
-          VERSION=$(grep -oP '(?<=<!-- version: v)[\d.]+(?= -->)' README.md || echo "1.0.0")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          MAJOR=$(echo $VERSION | cut -d. -f1)
-          MINOR=$(echo $VERSION | cut -d. -f2)
-          PATCH=$(echo $VERSION | cut -d. -f3)
-          PATCH=${PATCH:-0}
-          echo "major=$MAJOR" >> $GITHUB_OUTPUT
-          echo "minor=$MINOR" >> $GITHUB_OUTPUT
-          echo "patch=$PATCH" >> $GITHUB_OUTPUT
+          # --- work out the file set this event introduced ------------------------------
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE='${{ github.event.before }}'
+            AFTER='${{ github.sha }}'
 
-      - name: Detect changed files
-        id: changes
-        if: github.event_name == 'push' && steps.guard.outputs.skip != 'true'
-        run: |
-          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
-          echo "Changed files:"
-          echo "$CHANGED"
+            # A PR merge fires push + pull_request together; let the PR event own it.
+            PARENTS=$(git log -1 --format='%P' "$AFTER" | wc -w)
+            MSG=$(git log -1 --format='%s' "$AFTER")
+            if [ "$PARENTS" -gt 1 ] || printf '%s' "$MSG" | grep -qE '\(#[0-9]+\)$'; then
+              echo "level=skip" >> "$GITHUB_OUTPUT"
+              echo "merge commit on push -> skip (pull_request event handles it)"
+              exit 0
+            fi
 
-          NON_DOCS=$(echo "$CHANGED" | grep -v '^README.md$' | grep -v '^dist/' | grep -v '^graphify-out/' | grep -v '^$' || true)
-
-          if [ -z "$NON_DOCS" ]; then
-            echo "type=patch" >> $GITHUB_OUTPUT
-            echo "Docs-only change — patch bump"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+              # new branch / forced update / unknown base: fall back to the tip commit
+              CHANGED=$(git diff --name-only "${AFTER}~1" "$AFTER")
+            else
+              CHANGED=$(git diff --name-only "$BEFORE" "$AFTER")
+            fi
           else
-            echo "type=minor" >> $GITHUB_OUTPUT
-            echo "Code changes detected — minor bump"
+            # workflow_dispatch with level=auto: compare the tip commit
+            CHANGED=$(git diff --name-only 'HEAD~1' 'HEAD')
+          fi
+
+          echo "changed files in range:"
+          printf '%s\n' "$CHANGED"
+
+          # --- classify -----------------------------------------------------------------
+          # Drop generated output first.
+          REAL=$(printf '%s\n' "$CHANGED" | grep -Ev '^(dist/|graphify-out/)' | grep -v '^$' || true)
+          if [ -z "$REAL" ]; then
+            echo "level=skip" >> "$GITHUB_OUTPUT"
+            echo "only generated files changed -> skip"
+            exit 0
+          fi
+
+          # Of what's left, is any of it real source? (i.e. NOT test/asset/doc/CI/LICENSE)
+          CODE=$(printf '%s\n' "$REAL" | grep -Ev '(\.md$|^spec/|^assets/|^\.github/|^LICENSE$)' || true)
+          if [ -z "$CODE" ]; then
+            echo "level=patch" >> "$GITHUB_OUTPUT"
+            echo "non-generated changes are tests/assets/docs/CI only -> patch"
+          else
+            echo "level=minor" >> "$GITHUB_OUTPUT"
+            echo "real source changed -> minor"
+            printf 'source files:\n%s\n' "$CODE"
           fi
 
       - name: Compute new version
         id: new
-        if: steps.guard.outputs.skip != 'true'
+        if: steps.cls.outputs.level != 'skip'
         run: |
-          MAJOR=${{ steps.current.outputs.major }}
-          MINOR=${{ steps.current.outputs.minor }}
-          PATCH=${{ steps.current.outputs.patch }}
+          set -euo pipefail
+          LEVEL='${{ steps.cls.outputs.level }}'
 
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            NEW_MAJOR=$((MAJOR + 1))
-            NEW_VERSION="${NEW_MAJOR}.0.0"
-            echo "bump_type=major" >> $GITHUB_OUTPUT
-          elif [ "${{ steps.changes.outputs.type }}" == "patch" ]; then
-            NEW_PATCH=$((PATCH + 1))
-            NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-            echo "bump_type=patch" >> $GITHUB_OUTPUT
-          else
-            NEW_MINOR=$((MINOR + 1))
-            NEW_VERSION="${MAJOR}.${NEW_MINOR}.0"
-            echo "bump_type=minor" >> $GITHUB_OUTPUT
-          fi
+          CUR=$(grep -oP '(?<=<!-- version: v)[\d.]+(?= -->)' README.md || echo "0.0.0")
+          MAJOR=$(echo "$CUR" | cut -d. -f1)
+          MINOR=$(echo "$CUR" | cut -d. -f2)
+          PATCH=$(echo "$CUR" | cut -d. -f3); PATCH=${PATCH:-0}
 
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          case "$LEVEL" in
+            major) NEW="$((MAJOR + 1)).0.0" ;;
+            minor) NEW="${MAJOR}.$((MINOR + 1)).0" ;;
+            patch) NEW="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+            *) echo "unknown level '$LEVEL'"; exit 1 ;;
+          esac
+
+          echo "current=$CUR"   >> "$GITHUB_OUTPUT"
+          echo "version=$NEW"   >> "$GITHUB_OUTPUT"
+          echo "bump_type=$LEVEL" >> "$GITHUB_OUTPUT"
+          echo "$CUR -> $NEW ($LEVEL)"
 
       - name: Update version in README and package.json
-        if: steps.guard.outputs.skip != 'true'
+        if: steps.cls.outputs.level != 'skip'
         run: |
-          NEW_VERSION=${{ steps.new.outputs.version }}
-          BUMP_TYPE=${{ steps.new.outputs.bump_type }}
+          set -euo pipefail
+          NEW_VERSION='${{ steps.new.outputs.version }}'
+          BUMP_TYPE='${{ steps.new.outputs.bump_type }}'
           DATE=$(date +'%Y-%m-%d')
 
           sed -i "s/<!-- version: v[0-9.]* -->/<!-- version: v${NEW_VERSION} -->/" README.md
@@ -133,13 +159,14 @@ jobs:
           fi
 
           # The webpack build stamps the shipped manifest version from package.json,
-          # so it has to move in lockstep with the README marker above.
+          # so it moves in lockstep with the README marker above.
           sed -i "s/\"version\": \"[0-9.]*\"/\"version\": \"${NEW_VERSION}\"/" package.json
 
       - name: Commit and push
-        if: steps.guard.outputs.skip != 'true'
+        if: steps.cls.outputs.level != 'skip'
         run: |
-          NEW_VERSION=${{ steps.new.outputs.version }}
+          set -euo pipefail
+          NEW_VERSION='${{ steps.new.outputs.version }}'
           git add README.md package.json
           git diff --staged --quiet || git commit -m "chore: bump version to v${NEW_VERSION} [skip ci]"
           git push

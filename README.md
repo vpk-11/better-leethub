@@ -1,6 +1,6 @@
 # Better LeetHub - Automatically syncs your solved problems to GitHub.
-<!-- version: v5.0.0 -->
-![Version](https://img.shields.io/badge/version-v5.0.0-blue)
+<!-- version: v5.1.0 -->
+![Version](https://img.shields.io/badge/version-v5.1.0-blue)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/vpk-11/better-leethub/blob/main/LICENSE)
 
 <div align="center">
