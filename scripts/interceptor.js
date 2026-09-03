@@ -1,11 +1,11 @@
-/* Runs in the page's own (MAIN world) JS context - on Chrome via manifest content_scripts
-   "world": "MAIN", on Firefox via interceptorLoader.js's <script src> self-injection (MV2 has
-   no "world" key, so script-tag src execution is the equivalent - it always runs in true page
-   context regardless of manifest version, so this file stays identical between both builds).
+/* Runs in the page's own (MAIN world) JS context - on Chrome via the content_scripts
+   "world": "MAIN" key, on Firefox via interceptorLoader.js appending a <script src> tag
+   (Firefox 109+, its target, predates that key). Both routes execute this file in true
+   page context, so it stays byte-identical between the two builds.
 
    Two jobs, both things an isolated-world content script cannot see on its own:
-   1. Detect a passed submission's own /submit/ response (real 3.0's actual auto-push trigger -
-      passive network observation, no click handler needed, works on keyboard-submit for free).
+   1. Detect a passed submission's own /submit/ response (the auto-push trigger - passive
+      network observation, no click handler needed, works on keyboard-submit for free).
    2. Detect a LeetCode "Solution" writeup being published (a GraphQL mutation). */
 
 function handleSubmitResponse(url, data) {
