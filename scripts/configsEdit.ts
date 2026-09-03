@@ -1,16 +1,9 @@
-import { buildProblemPath, getBrowser, getTimestamp } from './leetcode/util.js';
+import { buildProblemPath, DEFAULT_CONFIG, getBrowser, getTimestamp } from './leetcode/util.js';
 import { renderConfigsSummary } from './configsSummary.js';
 
-/** The literal defaults every repo is provisioned with (see util.ts's own fallback values,
- * used consistently everywhere these keys are read) - what Reset restores, not just "undo
- * this edit session". */
-const DEFAULT_SETTINGS = {
-  leethub_custom_commit_message: null as string | null,
-  leethub_use_difficulty_folder: false,
-  leethub_use_language_folder: false,
-  leethub_use_timestamp_filename: false,
-  leethub_auto_commit_solution_post: true,
-};
+/** What Reset restores - the literal repo defaults (DEFAULT_CONFIG in util.ts, the single
+ * source these keys default to everywhere), not "undo this edit session". */
+const DEFAULT_SETTINGS = DEFAULT_CONFIG;
 
 const EDIT_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';

@@ -613,16 +613,29 @@ async function pushStatsToRepo(): Promise<void> {
 }
 
 const CONFIG_FILENAME = 'config.json';
-/** Every setting stored per-repo in config.json - the folder/timestamp/solution-post
- * toggles and the commit-message template. Not `leethub_token`/`leethub_hook` themselves -
- * those are per-browser auth state, not per-repo config. */
-const SETTINGS_KEYS = [
-  'leethub_use_difficulty_folder',
-  'leethub_use_language_folder',
-  'leethub_use_timestamp_filename',
-  'leethub_auto_commit_solution_post',
-  'leethub_custom_commit_message',
-];
+
+/** The per-repo config.json every repo is provisioned/reset with - the folder/timestamp/
+ * solution-post toggles and the commit-message template. NOT `leethub_token`/`leethub_hook`
+ * (those are per-browser auth state, not per-repo config). Single source for the default
+ * settings values: configsEdit/configsSummary import this rather than re-typing it. */
+const DEFAULT_CONFIG = Object.freeze({
+  leethub_use_difficulty_folder: false,
+  leethub_use_language_folder: false,
+  leethub_use_timestamp_filename: false,
+  leethub_auto_commit_solution_post: true,
+  leethub_custom_commit_message: null as string | null,
+});
+const SETTINGS_KEYS = Object.keys(DEFAULT_CONFIG);
+
+/** Whether a value parsed out of a repo's config.json still looks like one LeetHub wrote: a
+ * plain object whose every key is a known settings key. A hand-mangled or foreign file fails
+ * this - archiveAndResetStats() then archives it with everything else and drops a fresh
+ * default in its place instead of carrying it forward. */
+function isRecognisedRepoConfig(value: unknown): boolean {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  return keys.length > 0 && keys.every(k => SETTINGS_KEYS.includes(k));
+}
 
 /** Reads config.json from the linked repo. Returns { config, sha }, or null if it doesn't
  * exist yet or the request fails. */
@@ -696,10 +709,9 @@ async function syncConfigFromRepo(): Promise<void> {
 }
 
 async function ensureRepoReadme(hook: string, token: string): Promise<void> {
-  const existing = await fetch(
-    `https://api.github.com/repos/${hook}/contents/${README_FILENAME}`,
-    { headers: githubHeaders(token) }
-  );
+  const existing = await fetch(`https://api.github.com/repos/${hook}/contents/${README_FILENAME}`, {
+    headers: githubHeaders(token),
+  });
 
   if (existing.ok) return;
   if (existing.status !== 404) {
@@ -754,16 +766,21 @@ async function pushConfigToRepo(): Promise<void> {
 }
 
 /**
- * Archives the current LeetCode/ folder, stats.json, and README.md under a single dated
- * Archive/{date}/ folder (LeetCode/, stats.json, and README.md all land inside it, in place),
- * then creates a fresh, all-zero stats.json and a fresh scaffolded README.md at the repo root -
- * the same two files provisionRepoFiles() creates for a brand-new repo link. config.json is
- * left untouched. Uses the Git Data API (a tree patch against the current base tree, one
- * commit, one ref update) instead of per-file copy+delete, so the whole operation is a small
- * fixed number of API calls regardless of how many problems are being archived - not one call
- * per file, which would trip GitHub's secondary rate limit on any repo with a meaningful number
- * of solves. Assumes the repo's default branch is `main`, matching this codebase's existing
- * convention elsewhere (the topics-README problem links are already hardcoded to `tree/main`).
+ * Moves every file in the repo into a single dated `Archive/{date}/` folder, then re-provisions
+ * a fresh repo root: an all-zero stats.json and a scaffolded README.md (the same two files
+ * provisionRepoFiles() creates for a brand-new link).
+ *
+ * Kept out of the archive, at the repo root:
+ *  - `.gitignore` - left exactly where it is.
+ *  - `config.json` - IF it still looks like one LeetHub wrote (isRecognisedRepoConfig). If it
+ *    doesn't, it's archived with everything else and a fresh default config.json is written.
+ *  - any existing `Archive/` - prior archives are not re-nested inside the new one.
+ *
+ * Uses the Git Data API (one tree patch against the current base tree, one commit, one ref
+ * update) instead of per-file copy+delete, so the call count is small and fixed regardless of
+ * how many files are moved - a per-file approach would trip GitHub's secondary rate limit on
+ * any real repo. Assumes the default branch is `main`, matching this codebase's existing
+ * convention (the topics-README problem links are already hardcoded to `tree/main`).
  */
 async function archiveAndResetStats(): Promise<LocalStats | null> {
   const api = getBrowser();
@@ -805,60 +822,65 @@ async function archiveAndResetStats(): Promise<LocalStats | null> {
     archiveRoot = `${archiveRoot} ${suffix}`;
   }
 
-  // 3. New blobs for the freshly re-provisioned root files - same shape provisionRepoFiles()
-  // creates for a brand-new repo link (zeroed stats.json, scaffolded README.md).
-  const [statsBlobRes, readmeBlobRes] = await Promise.all([
-    fetch(`https://api.github.com/repos/${leethub_hook}/git/blobs`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        content: encodeJsonContent({ easy: '0', medium: '0', hard: '0' }),
-        encoding: 'base64',
-      }),
-    }),
-    fetch(`https://api.github.com/repos/${leethub_hook}/git/blobs`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        content: btoa(unescape(encodeURIComponent(DEFAULT_REPO_README))),
-        encoding: 'base64',
-      }),
-    }),
-  ]);
-  if (!statsBlobRes.ok)
-    throw new Error(`Failed to create stats.json blob: HTTP ${statsBlobRes.status}`);
-  if (!readmeBlobRes.ok)
-    throw new Error(`Failed to create README.md blob: HTTP ${readmeBlobRes.status}`);
-  const newStatsBlobSha = (await statsBlobRes.json()).sha;
-  const newReadmeBlobSha = (await readmeBlobRes.json()).sha;
-
-  // 4. Tree patch: move every LeetCode/ blob, stats.json, and README.md into Archive/{date}/ in
-  // place - same blob shas, only the paths change - plus fresh stats.json and README.md blobs
-  // at the root. config.json isn't touched, so it's simply not mentioned - base_tree carries it
-  // forward.
-  const patch: GitTreeItem[] = [];
-  for (const item of tree) {
-    if (item.type !== 'blob') continue;
-    if (item.path.startsWith('LeetCode/')) {
-      patch.push({ path: item.path, mode: item.mode, type: 'blob', sha: null });
-      patch.push({
-        path: `${archiveRoot}/${item.path}`,
-        mode: item.mode,
-        type: 'blob',
-        sha: item.sha,
-      });
-    } else if (item.path === STATS_FILENAME || item.path === README_FILENAME) {
-      patch.push({ path: item.path, mode: item.mode, type: 'blob', sha: null });
-      patch.push({
-        path: `${archiveRoot}/${item.path}`,
-        mode: item.mode,
-        type: 'blob',
-        sha: item.sha,
-      });
+  // 3. Decide whether config.json is carried forward. Only if it exists AND still parses to a
+  // recognised LeetHub config - otherwise it's archived like everything else and replaced.
+  let keepConfig = false;
+  if (tree.some(item => item.type === 'blob' && item.path === CONFIG_FILENAME)) {
+    try {
+      const raw = await fetchRepoContent(leethub_hook, leethub_token, CONFIG_FILENAME);
+      keepConfig = isRecognisedRepoConfig(JSON.parse(String(raw)));
+    } catch {
+      keepConfig = false;
     }
   }
-  patch.push({ path: STATS_FILENAME, mode: '100644', type: 'blob', sha: newStatsBlobSha });
-  patch.push({ path: README_FILENAME, mode: '100644', type: 'blob', sha: newReadmeBlobSha });
+
+  // 4. New blobs for the freshly re-provisioned root files (zeroed stats.json, scaffolded
+  // README.md, and a default config.json only when the old one isn't being kept).
+  const blobBody = (content: string): RequestInit => ({
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ content, encoding: 'base64' }),
+  });
+  const blobUrl = `https://api.github.com/repos/${leethub_hook}/git/blobs`;
+  const newBlobs: Record<string, string> = {
+    [STATS_FILENAME]: encodeJsonContent({ easy: '0', medium: '0', hard: '0' }),
+    [README_FILENAME]: btoa(unescape(encodeURIComponent(DEFAULT_REPO_README))),
+  };
+  if (!keepConfig) newBlobs[CONFIG_FILENAME] = encodeJsonContent(DEFAULT_CONFIG);
+
+  const newBlobSha: Record<string, string> = {};
+  await Promise.all(
+    Object.entries(newBlobs).map(async ([name, content]) => {
+      const res = await fetch(blobUrl, blobBody(content));
+      if (!res.ok) throw new Error(`Failed to create ${name} blob: HTTP ${res.status}`);
+      newBlobSha[name] = (await res.json()).sha;
+    })
+  );
+
+  // 5. Tree patch: move every blob into Archive/{date}/ in place (same blob sha, new path),
+  // except the ones staying at the root - .gitignore, a recognised config.json, and any prior
+  // Archive/ - which are simply not mentioned so base_tree carries them forward. Then the fresh
+  // root files.
+  const stayAtRoot = (path: string): boolean =>
+    path === '.gitignore' ||
+    (path === CONFIG_FILENAME && keepConfig) ||
+    path === 'Archive' ||
+    path.startsWith('Archive/');
+
+  const patch: GitTreeItem[] = [];
+  for (const item of tree) {
+    if (item.type !== 'blob' || stayAtRoot(item.path)) continue;
+    patch.push({ path: item.path, mode: item.mode, type: 'blob', sha: null });
+    patch.push({
+      path: `${archiveRoot}/${item.path}`,
+      mode: item.mode,
+      type: 'blob',
+      sha: item.sha,
+    });
+  }
+  for (const [name, sha] of Object.entries(newBlobSha)) {
+    patch.push({ path: name, mode: '100644', type: 'blob', sha });
+  }
 
   const newTreeRes = await fetch(`https://api.github.com/repos/${leethub_hook}/git/trees`, {
     method: 'POST',
@@ -868,12 +890,12 @@ async function archiveAndResetStats(): Promise<LocalStats | null> {
   if (!newTreeRes.ok) throw new Error(`Failed to create archive tree: HTTP ${newTreeRes.status}`);
   const newTreeSha = (await newTreeRes.json()).sha;
 
-  // 5. Commit it.
+  // 6. Commit it.
   const commitRes = await fetch(`https://api.github.com/repos/${leethub_hook}/git/commits`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
-      message: `Archive LeetCode/, stats.json, and README.md to ${archiveRoot} - LeetHub`,
+      message: `Archive repository contents to ${archiveRoot} - LeetHub`,
       tree: newTreeSha,
       parents: [parentCommitSha],
     }),
@@ -881,7 +903,7 @@ async function archiveAndResetStats(): Promise<LocalStats | null> {
   if (!commitRes.ok) throw new Error(`Failed to create archive commit: HTTP ${commitRes.status}`);
   const newCommitSha = (await commitRes.json()).sha;
 
-  // 6. Move the branch ref to point at it.
+  // 7. Move the branch ref to point at it.
   const updateRefRes = await fetch(
     `https://api.github.com/repos/${leethub_hook}/git/refs/heads/main`,
     { method: 'PATCH', headers, body: JSON.stringify({ sha: newCommitSha }) }
@@ -899,6 +921,7 @@ export {
   buildProblemPath,
   checkElem,
   convertToSlug,
+  DEFAULT_CONFIG,
   DEFAULT_REPO_README,
   delay,
   DIFFICULTY,
@@ -911,6 +934,7 @@ export {
   getTimestamp,
   getTodaysDate,
   isEmptyObject,
+  isRecognisedRepoConfig,
   languages,
   LeetHubError,
   parseCustomCommitMessage,

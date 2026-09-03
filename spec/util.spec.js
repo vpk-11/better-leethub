@@ -271,18 +271,21 @@ describe('archiveAndResetStats', () => {
     global.fetch = originalFetch;
   });
 
-  it('archives via a small fixed number of Git Data API calls, not one call per file', async () => {
-    const calls = [];
-    const manyFiles = Array.from({ length: 40 }, (_, i) => ({
-      path: `LeetCode/000${i}-problem/README.md`,
-      mode: '100644',
-      type: 'blob',
-      sha: `sha-${i}`,
-    }));
+  const manyFiles = Array.from({ length: 40 }, (_, i) => ({
+    path: `LeetCode/00${String(i).padStart(2, '0')}-problem/README.md`,
+    mode: '100644',
+    type: 'blob',
+    sha: `sha-${i}`,
+  }));
 
+  /** Wires global.fetch to a mock GitHub Git Data API. `configContent` is the raw (decoded)
+   * text returned for a GET on contents/config.json; pass null to omit config.json entirely.
+   * Returns the recorded call log. */
+  function mockGitApi(configContent) {
+    const calls = [];
     global.fetch = async (url, options = {}) => {
       const method = options.method || 'GET';
-      calls.push({ url, method });
+      calls.push({ url, method, body: options.body });
 
       if (url.includes('/git/trees/HEAD')) {
         return {
@@ -293,10 +296,22 @@ describe('archiveAndResetStats', () => {
               ...manyFiles,
               { path: 'stats.json', mode: '100644', type: 'blob', sha: 'old-stats-sha' },
               { path: 'README.md', mode: '100644', type: 'blob', sha: 'old-readme-sha' },
-              { path: 'config.json', mode: '100644', type: 'blob', sha: 'config-sha' },
+              { path: '.gitignore', mode: '100644', type: 'blob', sha: 'gitignore-sha' },
+              {
+                path: 'Archive/01-01-2026/stats.json',
+                mode: '100644',
+                type: 'blob',
+                sha: 'old-archive-sha',
+              },
+              ...(configContent != null
+                ? [{ path: 'config.json', mode: '100644', type: 'blob', sha: 'config-sha' }]
+                : []),
             ],
           }),
         };
+      }
+      if (url.endsWith('/contents/config.json')) {
+        return { ok: true, json: async () => ({ type: 'file', content: btoa(configContent) }) };
       }
       if (url.includes('/git/refs/heads/main') && method === 'GET') {
         return { ok: true, json: async () => ({ object: { sha: 'parent-commit-sha' } }) };
@@ -315,19 +330,74 @@ describe('archiveAndResetStats', () => {
       }
       return { ok: false };
     };
+    return calls;
+  }
+
+  const treePatchOf = calls => {
+    const call = calls.find(c => c.url.endsWith('/git/trees') && c.method === 'POST');
+    return call ? JSON.parse(call.body).tree : null;
+  };
+
+  it('moves every file into the archive in a fixed call count, keeping a recognised config.json in place', async () => {
+    const goodConfig = JSON.stringify({
+      leethub_use_difficulty_folder: true,
+      leethub_use_language_folder: false,
+      leethub_use_timestamp_filename: false,
+      leethub_auto_commit_solution_post: true,
+      leethub_custom_commit_message: null,
+    });
+    const calls = mockGitApi(goodConfig);
 
     const stats = await archiveAndResetStats();
-
-    expect(stats.easy).toBe(0);
-    expect(stats.medium).toBe(0);
-    expect(stats.hard).toBe(0);
     expect(stats.solved).toBe(0);
-    // Exactly 7 calls regardless of how many files were archived (40 here) - tree read, ref
-    // read, 2 blob creates (stats.json + README.md), tree-patch create, commit create, ref
-    // update.
-    expect(calls.length).toBe(7);
 
-    const treePatchCall = calls.find(c => c.url.endsWith('/git/trees') && c.method === 'POST');
-    expect(treePatchCall).toBeDefined();
+    // tree read, ref read, config.json content read, 2 blob creates (stats.json + README.md),
+    // tree-patch, commit, ref update - 8, regardless of the 40 files moved.
+    expect(calls.length).toBe(8);
+
+    const patch = treePatchOf(calls);
+    const paths = patch.map(e => e.path);
+    // recognised config.json + .gitignore + the prior Archive/ are left untouched (not in the patch)
+    expect(paths).not.toContain('config.json');
+    expect(paths).not.toContain('.gitignore');
+    expect(paths.some(p => p.startsWith('Archive/01-01-2026/'))).toBe(false);
+    // a problem file is moved (deleted at old path, recreated under Archive/)
+    expect(
+      patch.filter(e => e.path === 'LeetCode/0000-problem/README.md' && e.sha === null).length
+    ).toBe(1);
+    expect(paths.some(p => p.endsWith('/LeetCode/0000-problem/README.md'))).toBe(true);
+    // fresh root files
+    expect(patch.find(e => e.path === 'stats.json' && e.sha === 'new-blob-sha')).toBeDefined();
+    expect(patch.find(e => e.path === 'README.md' && e.sha === 'new-blob-sha')).toBeDefined();
+  });
+
+  it('archives an unrecognised config.json and writes a fresh default in its place', async () => {
+    const calls = mockGitApi(JSON.stringify({ totally: 'not a leethub config' }));
+
+    await archiveAndResetStats();
+
+    // one extra blob create (the replacement config.json) vs the keep-config case
+    expect(calls.length).toBe(9);
+
+    const patch = treePatchOf(calls);
+    // old config.json removed from root and moved under Archive/
+    expect(patch.filter(e => e.path === 'config.json' && e.sha === null).length).toBe(1);
+    expect(patch.some(e => e.path.endsWith('/config.json') && e.sha === 'config-sha')).toBe(true);
+    // fresh default config.json written at the root
+    expect(patch.filter(e => e.path === 'config.json' && e.sha === 'new-blob-sha').length).toBe(1);
+  });
+
+  it('handles a repo with no config.json at all (no content read, no replacement)', async () => {
+    const calls = mockGitApi(null);
+
+    await archiveAndResetStats();
+
+    // no contents/config.json read (nothing to inspect); still writes a fresh default config.json.
+    // tree, ref, 3 blobs (stats + readme + config), tree-patch, commit, ref = 8.
+    expect(calls.some(c => c.url.endsWith('/contents/config.json'))).toBe(false);
+    expect(calls.length).toBe(8);
+    const patch = treePatchOf(calls);
+    expect(patch.filter(e => e.path === 'config.json').length).toBe(1); // only the fresh default
+    expect(patch.find(e => e.path === 'config.json').sha).toBe('new-blob-sha');
   });
 });
