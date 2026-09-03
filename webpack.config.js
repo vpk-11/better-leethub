@@ -25,6 +25,7 @@ const ignore = [
   '**/eslint.config.js',
   '**/README.md',
   '**/PRIVACY.md',
+  '**/docs/**',
   '**/assets/extension', // web store assets
   // webpack compiled files
   '**/scripts/leetcode/**',
