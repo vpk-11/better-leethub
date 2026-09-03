@@ -22,10 +22,9 @@
 Better LeetHub has no backend. Many "sync to GitHub" extensions route your traffic through a shared OAuth app or the developer's own server. This one does not:
 
 - **You hold your own GitHub token.** You generate a fine-grained Personal Access Token scoped to a single repo and paste it in. It is stored in your browser's local extension storage, sent only as an authorization header to `api.github.com`, never sent to LeetCode or any other host, and never logged. No shared OAuth app.
-- **Your data routes only to GitHub and LeetCode.** Your submission code, credentials, problem data, solved-problem counts, and settings go directly from your browser to `api.github.com` or `leetcode.com` and nowhere else. No third-party server sits in between.
+- **Everything routes only to GitHub and LeetCode.** Your submission code, credentials, problem data, solved-problem counts, and settings go directly from your browser to `api.github.com` or `leetcode.com` and nowhere else. The extension makes no other network request: no third-party host, no CDN, no remote script, stylesheet, font, or image. The webfonts ship inside the extension.
 - **The developer runs no server and receives nothing.** No analytics, no telemetry, no error reporting, no update pings. There is nothing on the developer's side to collect anything.
-- **One third-party request, disclosed:** the popup and the setup page load webfonts from Google Fonts (`fonts.googleapis.com`, `fonts.gstatic.com`). That request tells Google your IP address, the request time, and your browser's User-Agent, the same as any site you load a font from. It carries none of your data: no code, no token, no repo contents, no stats, no account identifiers.
-- **Verify it yourself.** The extension is open source. Every network call is in [`scripts/`](scripts/), or watch your browser's DevTools Network tab while it runs.
+- **Verify it yourself.** The extension is open source. Every network call is in [`scripts/`](scripts/), or watch your browser's DevTools Network tab while it runs, you will see only `api.github.com` and `leetcode.com`.
 
 Full detail, including the honest limits of local token storage: [PRIVACY.md](PRIVACY.md).
 

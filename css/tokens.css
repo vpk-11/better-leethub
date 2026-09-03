@@ -7,9 +7,9 @@
  * difficulty hues from the problem pages. Light theme keeps the LeetCode hues, darkened only
  * where a value is used as text on a white ground. Easy/Medium/Hard stay semantic status
  * colors, separate from the accent.
- * No new dependency: Manrope/JetBrains Mono load the same way semantic-ui's CSS/JS already
- * did (a plain CDN <link>, not an npm package) - and semantic-ui itself is gone, nothing in
- * this design uses it any more. */
+ * Manrope + JetBrains Mono are self-hosted (css/fonts.css, .woff2 in css/fonts/) - no
+ * runtime request to any third party. Each --font-* stack keeps a native fallback so the
+ * UI stays readable if a face fails to load. */
 
 :root {
   --bg: #1a1a1a;

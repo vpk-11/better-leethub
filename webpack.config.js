@@ -24,6 +24,7 @@ const ignore = [
   '**/tsconfig.json',
   '**/eslint.config.js',
   '**/README.md',
+  '**/PRIVACY.md',
   '**/assets/extension', // web store assets
   // webpack compiled files
   '**/scripts/leetcode/**',

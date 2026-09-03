@@ -1,6 +1,6 @@
 # Privacy Policy - Better LeetHub
 
-_Last updated: 2026-08-31_
+_Last updated: 2026-09-03_
 
 Better LeetHub is a browser extension for Chrome and Firefox that commits your
 solved LeetCode problems to a GitHub repository you own. This document describes
@@ -18,8 +18,9 @@ the end.
   `github.com`) and **LeetCode** (`leetcode.com`). Both connections go directly
   from your browser.
 - **No submission data, credentials, or personal data ever leaves your browser
-  except to GitHub and LeetCode.** The only other network request is a static
-  Google Fonts stylesheet, and it carries none of your data (details below).
+  except to GitHub and LeetCode.** The extension makes no other network request
+  of any kind: no third-party hosts, no fonts or assets fetched at runtime
+  (they ship inside the extension).
 - The developer operates **no server**. There is no analytics, no telemetry, no
   error reporting, and no update-check ping. There is nothing on the developer's
   side to receive your data.
@@ -72,8 +73,8 @@ its own; the token is stored as-is.
 one, is committed as `Solution.md` in the same repo, the same way.
 
 **Your GitHub PAT** is attached only as an `Authorization: token <PAT>` header on
-requests to `api.github.com`. It is never sent to LeetCode, never sent to the
-Google Fonts hosts, and never sent to any other server. It is never written to
+requests to `api.github.com`. It is never sent to LeetCode and never sent to any
+other server. It is never written to
 the browser console, never included in an error message, and never displayed in
 the UI (the setup screen keeps it in a masked password field). If GitHub rejects
 the token (expired, revoked, or scope changed), the next time you open the popup
@@ -97,35 +98,19 @@ requests to `leetcode.com/graphql/` include your existing LeetCode session
 cookie. This is sent back to LeetCode's own domain only - it is how LeetCode
 authorizes you to read your own data. It is not sent anywhere else.
 
-## The one third-party request: Google Fonts
+## No third-party requests
 
-The extension's popup and its setup page load a webfont stylesheet from
-`fonts.googleapis.com` and the font files it references from `fonts.gstatic.com`.
-This request fires when you open the popup or the setup page.
-
-**What Google receives from this request:** your IP address, the time of the
-request, your browser's `User-Agent` string, and a `Referer` header indicating
-that an extension page made the request. This is the standard set of information
-any website receives when your browser fetches a resource from it.
-
-**What this request does not carry:** no submission code, no problem data, no
-GitHub PAT, no repository contents, no solved-problem counts, no settings, and no
-account identifiers. A stylesheet request has no body and no custom headers.
-Google cannot learn anything about your LeetCode activity or your GitHub
-repository from it.
-
-This request is governed by
-[Google's privacy policy](https://policies.google.com/privacy). If you would
-rather the extension make no third-party requests at all, a content blocker that
-blocks `fonts.googleapis.com` will stop it; the extension falls back to your
-system fonts and works exactly the same.
+The popup and the setup page use two webfonts (Manrope and JetBrains Mono).
+Those font files are **bundled inside the extension** (`css/fonts/`) and loaded
+from local extension storage. Nothing is fetched from Google Fonts or any other
+third-party host at runtime. The extension has no CDN dependency, no remote
+script, no remote stylesheet, and no remote image.
 
 ## What the developer collects: nothing
 
 There is no Better LeetHub server. The extension contains no analytics SDK, no
 telemetry, no crash/error reporting service, and no "check for updates" call.
-Every network request it makes is to `api.github.com`, `leetcode.com`, or (for
-the popup and setup page only) the two Google Fonts hosts described above. The
+Every network request it makes is to `api.github.com` or `leetcode.com`. The
 developer has no way to receive your code, your statistics, your credentials, or
 any record that you use the extension, because there is nothing on the
 developer's side for the extension to talk to.
@@ -166,8 +151,8 @@ Better LeetHub is open source: <https://github.com/vpk-11/better-leethub>
   `scripts/interceptor.js`. Every one targets `api.github.com` or
   `leetcode.com/graphql/`.
 - **Watch it run.** Open your browser's developer tools, go to the Network tab,
-  and use the extension. Every request will be to `api.github.com`,
-  `leetcode.com`, or the two Google Fonts hosts.
+  and use the extension. Every request will be to `api.github.com` or
+  `leetcode.com`. Nothing else.
 - **Check the permissions.** The extension requests only the `storage` permission
   and runs its content script only on `https://leetcode.com/*`.
 
