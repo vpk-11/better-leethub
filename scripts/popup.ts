@@ -22,6 +22,22 @@ const renderStats = (stats: (StatsCounts & { solved: number }) | undefined): voi
    mid-flight (worse on Firefox than Chrome). See background.js. */
 wireConfigsEditForm(() => api.runtime.sendMessage({ type: 'PUSH_CONFIG' }));
 
+/* Manual "re-sync problem counts" button next to the big number. Runs the full README
+   re-walk in the background script (RECOMPUTE_STATS -> recomputeStatsFromRepo), same as
+   welcome.html's "Sync Stats" - for when the per-submission running total has drifted from
+   the repo's real state. */
+$('#refresh_stats').on('click', function () {
+  const btn = $(this);
+  if (btn.hasClass('is-syncing')) return;
+  btn.addClass('is-syncing');
+  api.runtime
+    .sendMessage({ type: 'RECOMPUTE_STATS' })
+    .then((response: { stats?: StatsCounts & { solved: number }; error?: string }) => {
+      if (response?.stats) renderStats(response.stats);
+    })
+    .finally(() => btn.removeClass('is-syncing'));
+});
+
 /* Auth/repo-linking always forces a real standalone tab, never rendered inside the popup's
  * own window - a popup tears down the instant it loses focus, and generating a PAT means a
  * github.com trip that always steals focus (confirmed not Firefox-specific, see

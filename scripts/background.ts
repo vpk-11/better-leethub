@@ -2,6 +2,7 @@ import {
   archiveAndResetStats,
   getBrowser,
   pushConfigToRepo,
+  recomputeStatsFromRepo,
   syncConfigFromRepo,
   syncStatsFromRepo,
 } from './leetcode/util.js';
@@ -10,6 +11,7 @@ const api = getBrowser();
 
 type BackgroundMessage =
   | { type: 'POPUP_SYNC' }
+  | { type: 'RECOMPUTE_STATS' }
   | { type: 'PUSH_CONFIG' }
   | { type: 'ARCHIVE_RESET' };
 
@@ -28,6 +30,12 @@ api.runtime.onMessage.addListener(
         sendResponse({ stats });
       });
       return true; // keep the message channel open for the async response
+    }
+    if (request?.type === 'RECOMPUTE_STATS') {
+      recomputeStatsFromRepo()
+        .then(stats => sendResponse({ stats }))
+        .catch(err => sendResponse({ error: err instanceof Error ? err.message : String(err) }));
+      return true;
     }
     if (request?.type === 'PUSH_CONFIG') {
       pushConfigToRepo().then(() => sendResponse({ ok: true }));
