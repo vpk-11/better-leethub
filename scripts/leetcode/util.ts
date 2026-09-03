@@ -622,6 +622,29 @@ async function pushStatsToRepo(): Promise<void> {
   await putRepoStats(leethub_hook, leethub_token, { easy, medium, hard }, existing?.sha);
 }
 
+/** Reads stats.json from the repo, adds 1 to the given difficulty's bucket, writes it back,
+ * and mirrors the result into local storage. The repo file is the source of truth - no
+ * dependency on the local running total, which drifts across manual recomputes and multiple
+ * browsers. Called once per genuinely-new solve, in the same sequential commit flow as the
+ * root-README topic-table update (see loader() in leetcode.ts). */
+async function bumpRepoStat(difficulty: string | undefined): Promise<void> {
+  const api = getBrowser();
+  const { leethub_hook, leethub_token } = await api.storage.local.get([
+    'leethub_hook',
+    'leethub_token',
+  ]);
+  if (!leethub_hook || !leethub_token) return;
+
+  const diff = getDifficulty(difficulty ?? '').toLowerCase();
+  if (diff !== 'easy' && diff !== 'medium' && diff !== 'hard') return;
+
+  const existing = await getRepoStats(leethub_hook, leethub_token);
+  const counts: StatsCounts = existing?.counts ?? { easy: 0, medium: 0, hard: 0 };
+  counts[diff] += 1;
+  await putRepoStats(leethub_hook, leethub_token, counts, existing?.sha);
+  await saveLocalStats(counts);
+}
+
 const CONFIG_FILENAME = 'config.json';
 
 /** The per-repo config.json every repo is provisioned/reset with - the folder/timestamp/
@@ -955,6 +978,7 @@ export {
   syncConfigFromRepo,
   provisionRepoFiles,
   pushStatsToRepo,
+  bumpRepoStat,
   recomputeStatsFromRepo,
   syncStatsFromRepo,
   computeStatsFromReadmes,

@@ -6,10 +6,8 @@ import {
   convertToSlug,
   DEFAULT_REPO_README,
   delay,
-  DIFFICULTY,
   fetchRepoTree,
   getBrowser,
-  getDifficulty,
   githubHeaders,
   getTimestamp,
   getTodaysDate,
@@ -17,7 +15,7 @@ import {
   LeetHubError,
   parseCustomCommitMessage,
   problemDirInTree,
-  pushStatsToRepo,
+  bumpRepoStat,
   slugFromPath,
 } from './util.js';
 import { appendProblemToReadme, sortTopicsInReadme } from './readmeTopics.js';
@@ -160,32 +158,6 @@ const getAndInitializeStats = (slug: string): Promise<Stats> => {
 };
 
 /**
- * Increment the statistics for a given problem based on its difficulty.
- * @param difficulty - The difficulty level of the problem, which can be `easy`, `medium`, or `hard`.
- * @param slug - The bare problem slug, e.g. `0001-two-sum` (not the folder path).
- * @returns A promise that resolves to the updated statistics object.
- */
-const incrementStats = (difficulty: string | undefined, slug: string): Promise<Stats> => {
-  const diff = getDifficulty(difficulty ?? '');
-  return api.storage.local.get('stats').then(({ stats }) => {
-    if (!stats) {
-      stats = DEFAULT_STATS();
-    }
-    stats.solved = (stats.solved || 0) + 1;
-    stats.easy = (stats.easy || 0) + (diff === DIFFICULTY.EASY ? 1 : 0);
-    stats.medium = (stats.medium || 0) + (diff === DIFFICULTY.MEDIUM ? 1 : 0);
-    stats.hard = (stats.hard || 0) + (diff === DIFFICULTY.HARD ? 1 : 0);
-    stats.shas = stats.shas || {};
-    if (slug) {
-      stats.shas[slug] = stats.shas[slug] || {};
-      stats.shas[slug].difficulty = diff.toLowerCase();
-    }
-    api.storage.local.set({ stats });
-    return stats as Stats;
-  });
-};
-
-/**
  * The repo directory a previously-solved problem already occupies, or null if this slug
  * isn't in the repo yet. One git-tree scan (loader() runs once per submission, so this is
  * never inside a per-problem loop). Matches the slug under ANY folder shape - a
@@ -297,8 +269,21 @@ async function uploadGitWith409Retry(
     return await upload(token, hook, code, problemName, filename, sha, commitMsg);
   } catch (err) {
     if (err instanceof LeetHubNetworkError && err.status === 409) {
-      const data = await getGitHubFile(token, hook, problemName, filename).then(res => res.json());
-      return upload(token, hook, code, problemName, filename, data.sha, commitMsg);
+      // A 409 here is one of two things: a stale SHA (the file exists, we passed the wrong
+      // sha) or a concurrent write to the branch (the file was never created). Wait for the
+      // branch to settle, then look: if the file exists now, retry with its real sha; if it
+      // still 404s, the 409 was a write race - retry as a fresh create (no sha).
+      await delay(() => undefined, WAIT_FOR_GITHUB_API_TO_NOT_THROW_409_MS);
+      let retrySha = '';
+      try {
+        const data = await getGitHubFile(token, hook, problemName, filename).then(res =>
+          res.json()
+        );
+        retrySha = data?.sha ?? '';
+      } catch {
+        retrySha = '';
+      }
+      return upload(token, hook, code, problemName, filename, retrySha, commitMsg);
     }
     throw err;
   }
@@ -602,29 +587,26 @@ function loader(leetCode: LeetCodeV1 | LeetCodeV2, suffix?: string): void {
       /* Identity is the slug, not the path. If this problem is already in the repo (under
          any folder shape, including an older/other-fork layout), re-solving writes back to
          where it already lives and never re-counts it - so toggling a folder setting and
-         re-syncing can't fork a duplicate under the new shape. Two cases still take the
-         fresh path with a full README + stats write: a pre-fork bare-repo-root file
-         (existingDir === '', so the re-solve lands in a proper LeetCode/ folder), and a
-         confirmed-new problem (existingDir === null). When the repo tree can't be read
-         (existingDir === undefined) we upload but leave stats alone - a transient GitHub
-         error must not double-count. */
+         re-syncing can't fork a duplicate under the new shape. A real folder string means
+         "already there"; '' (pre-fork bare-root file) and null (confirmed new) both take
+         the fresh path with a full README + stats write.
+
+         When the git-tree read fails (existingDir === undefined - rate limit / transient),
+         fall back to the local SHA cache: a slug we've pushed before is a re-solve (skip
+         stats), anything else counts as new. A flaky tree read must never silently stop
+         stats from moving. */
       const existingDir = await findExistingProblemDir(problemName);
-      const treeUnavailable = existingDir === undefined;
-      const alreadyCompleted = typeof existingDir === 'string' && existingDir !== '';
-      const problemPath = existingDir ? existingDir : freshPath;
-
-      /* Upload README - write-once: not overwritten on repeat submissions to the same
-         problem (3.0's real behavior). */
-      const uploadReadMe = alreadyCompleted
-        ? undefined
-        : uploadGitWith409Retry(encode(probStatement), problemPath, readmeFilename, readmeMsg);
-
-      /* Upload Notes if any*/
-      const notes = leetCode.getNotesIfAny();
-      let uploadNotes;
-      if (notes != undefined && notes.length > 0) {
-        uploadNotes = uploadGitWith409Retry(encode(notes), problemPath, 'NOTES.md', createNotesMsg);
+      let alreadyCompleted = typeof existingDir === 'string' && existingDir !== '';
+      if (existingDir === undefined) {
+        const { stats } = await api.storage.local.get('stats');
+        const shas = stats?.shas ?? {};
+        alreadyCompleted =
+          shas[problemName] != null || shas[addLeadingZeros(problemName)] != null;
       }
+      const problemPath =
+        typeof existingDir === 'string' && existingDir !== '' ? existingDir : freshPath;
+
+      const notes = leetCode.getNotesIfAny();
 
       /* Commit message: 3.0's real template variables (not decisions.md's older paraphrase). */
       // findCode() is async for LeetCodeV1 (fetches the submission details page) and sync for
@@ -646,27 +628,51 @@ function loader(leetCode: LeetCodeV1 | LeetCodeV2, suffix?: string): void {
       };
       const commitMsg = (await getCustomCommitMessage(problemContext)) ?? probStats;
 
-      /* Upload code to Git */
-      const uploadCode = uploadGitWith409Retry(encode(code), problemPath, filename, commitMsg);
-
-      /* Group problem into its relevant topics */
-      const updateRepoReadMe = updateReadmeTopicTagsWithProblem(
-        leetCode.submissionData?.question?.topicTags,
-        problemName,
-        problemPath,
-        leetCode.difficulty
-      );
-
-      await Promise.all([uploadReadMe, uploadNotes, uploadCode, updateRepoReadMe]);
-
+      /* GitHub's Contents API 409s on concurrent writes to the same branch, so every file
+         for this problem is uploaded ONE AT A TIME, never Promise.all. The code file is what
+         "solved" means: it goes first and its failure aborts the run. The per-problem
+         README, NOTES, the root-README topic table, and the stats.json push are all
+         best-effort - each is awaited in turn and its failure is logged, never fatal. */
+      await uploadGitWith409Retry(encode(code), problemPath, filename, commitMsg);
       leetCode.markUploaded();
 
-      if (!alreadyCompleted && !treeUnavailable) {
-        // Keep stats.json as a running total instead of letting it drift until the next
-        // full recompute (see pushStatsToRepo in util.js). Slug-keyed: a re-solve under a
-        // different folder shape resolves to a real existingDir above and never gets here.
-        // Skipped when the repo tree was unreadable - can't tell new from already-solved.
-        incrementStats(leetCode.difficulty, problemName).then(pushStatsToRepo);
+      try {
+        /* Per-problem README - write-once, not overwritten on a repeat submission. */
+        if (!alreadyCompleted) {
+          await uploadGitWith409Retry(
+            encode(probStatement),
+            problemPath,
+            readmeFilename,
+            readmeMsg
+          );
+        }
+        if (notes != undefined && notes.length > 0) {
+          await uploadGitWith409Retry(encode(notes), problemPath, 'NOTES.md', createNotesMsg);
+        }
+        await updateReadmeTopicTagsWithProblem(
+          leetCode.submissionData?.question?.topicTags,
+          problemName,
+          problemPath,
+          leetCode.difficulty
+        );
+      } catch (err) {
+        console.error('LeetHub: non-fatal - README / NOTES / topic-table update failed', err);
+      }
+
+      if (!alreadyCompleted) {
+        console.log('LeetHub: new solve - bumping stats.json', { problemName, existingDir });
+        // stats.json write is folded into this same sequential commit flow, right after the
+        // topic-table update. Repo file is the source of truth (read, +1, write back) - no
+        // dependency on a local running total. Best-effort: a failure here is logged, never
+        // fatal, and a manual Sync / the next solve reconciles it.
+        try {
+          await bumpRepoStat(leetCode.difficulty);
+          console.log('LeetHub: stats.json updated');
+        } catch (err) {
+          console.error('LeetHub: stats.json update failed', err);
+        }
+      } else {
+        console.log('LeetHub: re-solve, stats unchanged', { problemName, existingDir });
       }
     } catch (err) {
       leetCode.markUploadFailed();
