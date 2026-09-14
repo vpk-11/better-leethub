@@ -4,7 +4,7 @@
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/vpk-11/better-leethub/blob/main/LICENSE)
 
 <div align="center">
-<img src="assets/octocode.png" alt="Better LeetHub - Automatically syncs your solved problems to GitHub." width="400">
+<img src="assets/icon/icon.svg" alt="Better LeetHub - Automatically syncs your solved problems to GitHub." width="128">
 </div>
 
 ## What is Better LeetHub?
