@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <rect width="128" height="128" rx="28" fill="#1a1a1a"/>
-  <g transform="translate(-9 17) scale(0.72)">
-    <path d="M54 26c-9 0-9 8-9 19 0 10-4 14-11 19 7 5 11 9 11 19 0 11 0 19 9 19" fill="none" stroke="#ffa116" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M74 26c9 0 9 8 9 19 0 10 4 14 11 19-7 5-11 9-11 19 0 11 0 19-9 19" fill="none" stroke="#ffa116" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="2" y="2" width="124" height="124" rx="26" fill="#161b22" stroke="#30363d" stroke-width="3"/>
+  <g transform="translate(-10 17) scale(0.72)">
+    <path d="M54 26c-9 0-9 8-9 19 0 10-4 14-11 19 7 5 11 9 11 19 0 11 0 19 9 19" fill="none" stroke="#f59e0b" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M74 26c9 0 9 8 9 19 0 10 4 14 11 19-7 5-11 9-11 19 0 11 0 19-9 19" fill="none" stroke="#f59e0b" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
-  <text x="93" y="67" text-anchor="middle" dominant-baseline="central" font-family="'Manrope','Helvetica Neue',Arial,sans-serif" font-weight="800" font-size="46" fill="#ffffff">LH</text>
+  <text x="92" y="67" text-anchor="middle" dominant-baseline="central" font-family="'Manrope', -apple-system, sans-serif" font-weight="800" font-size="46" fill="#ffffff">LH</text>
 </svg>
