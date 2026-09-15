@@ -1,7 +1,7 @@
-# Graph Report - leethub  (2026-09-03)
+# Graph Report - leethub  (2026-09-15)
 
 ## Corpus Check
-- 34 files · ~272,757 words
+- 34 files · ~225,825 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `989d9bcc`
+- Built from commit: `d8f9bffe`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -44,16 +44,16 @@
 10. `archiveAndResetStats()` - 11 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `renderStats()` --calls--> `$()`  [INFERRED]
-  scripts/popup.ts → scripts/jquery-3.7.1.min.js
 - `setSyncStatus()` --calls--> `$()`  [INFERRED]
   scripts/welcome.ts → scripts/jquery-3.7.1.min.js
-- `updateFolderLivePreview()` --calls--> `$()`  [INFERRED]
-  scripts/configsEdit.ts → scripts/jquery-3.7.1.min.js
-- `updateTimestampExample()` --calls--> `$()`  [INFERRED]
-  scripts/configsEdit.ts → scripts/jquery-3.7.1.min.js
-- `wireConfigsEditForm()` --calls--> `$()`  [INFERRED]
-  scripts/configsEdit.ts → scripts/jquery-3.7.1.min.js
+- `renderStats()` --calls--> `$()`  [INFERRED]
+  scripts/popup.ts → scripts/jquery-3.7.1.min.js
+- `renderStats()` --calls--> `$()`  [INFERRED]
+  scripts/welcome.ts → scripts/jquery-3.7.1.min.js
+- `showCommitMode()` --calls--> `$()`  [INFERRED]
+  scripts/welcome.ts → scripts/jquery-3.7.1.min.js
+- `showHookMode()` --calls--> `$()`  [INFERRED]
+  scripts/welcome.ts → scripts/jquery-3.7.1.min.js
 
 ## Import Cycles
 - None detected.
@@ -105,7 +105,7 @@ Cohesion: 0.09
 Nodes (37): $(), A(), Ae(), B(), Be(), c(), $e(), ee() (+29 more)
 
 ## Knowledge Gaps
-- **91 isolated node(s):** `name`, `version`, `private`, `description`, `type` (+86 more)
+- **91 isolated node(s):** `__filename`, `__dirname`, `ignore`, `folderIgnore`, `api` (+86 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -120,7 +120,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.054) - this node is a cross-community bridge._
 - **Are the 10 inferred relationships involving `$()` (e.g. with `updateFolderLivePreview()` and `updateTimestampExample()`) actually correct?**
   _`$()` has 10 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `name`, `version`, `private` to the rest of the system?**
+- **What connects `__filename`, `__dirname`, `ignore` to the rest of the system?**
   _91 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `jQuery Vendor Bundle` be split into smaller, more focused modules?**
   _Cohesion score 0.10530612244897959 - nodes in this community are weakly interconnected._
