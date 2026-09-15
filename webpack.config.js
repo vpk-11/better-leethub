@@ -17,7 +17,8 @@ const ignore = [
   '**/.prettierrc',
   '**/.eslintrc',
   '**/.env',
-  '**/assets/.DS_Store',
+  '**/.DS_Store',
+  '**/scripts/dev/**',
   '**/package*',
   '**/pnpm-lock.yaml',
   '**/webpack*',
@@ -39,7 +40,7 @@ const ignore = [
   '**/manifest-firefox.json',
 ];
 
-const folderIgnore = ['**/chrome/**', '**/firefox/**', '**/manifest.json'];
+const folderIgnore = ['**/chrome/**', '**/firefox/**', '**/manifest.json', '**/.DS_Store'];
 
 const manifestTransform = content => {
   const filteredContent = content
@@ -130,7 +131,7 @@ export default {
         {
           from: 'assets/**',
           globOptions: {
-            ignore: [...ignore, './assets/.DS_Store'],
+            ignore,
           },
         },
         {
