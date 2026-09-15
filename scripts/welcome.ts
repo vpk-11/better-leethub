@@ -256,6 +256,31 @@ $('#unlink').on('click', () => {
   unlinkRepo();
 });
 
+/* Logout: clears the token too (unlike Unlink Repo, which only drops the repo link).
+ * Mirrors popup.ts's #settings-logout-reauth. */
+$('#logout').on('click', () => {
+  const confirmed = confirm(
+    'Log out of Better LeetHub? This clears your stored GitHub token and unlinks your ' +
+      'repo from this browser. Your GitHub repo and its contents are not touched. ' +
+      'You will need to paste your token again to reconnect.'
+  );
+  if (!confirmed) return;
+
+  api.storage.local.set(
+    {
+      leethub_token: null,
+      leethub_hook: null,
+      leethub_username: null,
+      repo: null,
+      mode_type: 'hook',
+      stats: null,
+    },
+    () => {
+      location.reload();
+    }
+  );
+});
+
 /* Check current mode on page load */
 const checkModeType = async (): Promise<void> => {
   const { mode_type, leethub_hook, leethub_token } = await api.storage.local.get([
