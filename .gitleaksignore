@@ -1,0 +1,15 @@
+# Upstream history findings from the original LeetHub authors; not present in the current tree
+0e3c82fd1a8baf21b6bb75ade7f4f36bfd532ce5:scripts/authorize.js:generic-api-key:17
+0e3c82fd1a8baf21b6bb75ade7f4f36bfd532ce5:scripts/oauth2.js:generic-api-key:12
+36db62934ef20ab0299201290b3296f8bf6479f5:scripts/authorize.js:generic-api-key:17
+36db62934ef20ab0299201290b3296f8bf6479f5:scripts/oauth2.js:generic-api-key:12
+5a8d62891c896dea52edf9d6dd51114b243fc862:scripts/authorize.js:generic-api-key:17
+5a8d62891c896dea52edf9d6dd51114b243fc862:scripts/oauth2.js:generic-api-key:13
+83613822e659d463c244928067e4acc4c1f5af6f:README.md:generic-api-key:93
+a46c9e9d8843b3ecf8467cd9ada2fb38c6000b34:scripts/leetcode.js:jwt:802
+e30b4910fc01c0c8603ef20e16f0936af010e796:1545_response.json:generic-api-key:10
+e30b4910fc01c0c8603ef20e16f0936af010e796:1545_response.json:generic-api-key:26
+e30b4910fc01c0c8603ef20e16f0936af010e796:1545_response.json:generic-api-key:42
+e30b4910fc01c0c8603ef20e16f0936af010e796:1545_response.json:generic-api-key:58
+f72f2954a624c1b2a28f07b5adbf2ab57521e5ad:scripts/authorize.js:generic-api-key:17
+f72f2954a624c1b2a28f07b5adbf2ab57521e5ad:scripts/oauth2.js:generic-api-key:42
