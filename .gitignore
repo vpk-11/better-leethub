@@ -9,14 +9,8 @@ dist/
 # AI agent working files (local only)
 .claude/
 
-# Graphify: machine-local, not portable across clones
-graphify-out/manifest.json
-graphify-out/cost.json
-graphify-out/.graphify_root
-graphify-out/.graphify_python
-graphify-out/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
-# Rebuild-speed cache - also bakes in this machine's absolute path, never commit it
-graphify-out/cache/
+# Graphify output
+graphify-out/
 
 
 *.DS_Store
