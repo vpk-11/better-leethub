@@ -1,12 +1,8 @@
 /* Design tokens + shared components, used by both popup.html and welcome.html so the two
- * surfaces can't drift apart. Ported verbatim from the reviewed design mockups (Artifact
- * exploration + iteration round with the project owner - see decisions.md) rather than
- * hand-guessed. Dark-first (project owner's explicit default), one accent tier. v3-phase-07
- * section 5 retuned every color to LeetCode's real brand palette: accent #FFA116 (their
- * logo/submit-button orange), #1A1A1A/#282828 charcoal grounds, and the exact Easy/Medium/Hard
- * difficulty hues from the problem pages. Light theme keeps the LeetCode hues, darkened only
- * where a value is used as text on a white ground. Easy/Medium/Hard stay semantic status
- * colors, separate from the accent.
+ * surfaces can't drift apart. Dark-first, one accent tier: GitHub-dark grounds with an amber
+ * accent. Light theme uses darker text-only tokens (--accent-text, --text-subtle, --hard-text)
+ * to hold WCAG AA on light grounds. Easy/Medium/Hard stay semantic status colors, separate
+ * from the accent.
  * Manrope + JetBrains Mono are self-hosted (css/fonts.css, .woff2 in css/fonts/) - no
  * runtime request to any third party. Each --font-* stack keeps a native fallback so the
  * UI stays readable if a face fails to load. */
