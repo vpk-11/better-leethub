@@ -1,3 +1,5 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import { appendProblemToReadme, sortTopicsInReadme } from '../scripts/leetcode/readmeTopics.js';
 
 describe('sortTopicsInReadme', () => {
@@ -18,9 +20,9 @@ describe('sortTopicsInReadme', () => {
     const output = sortTopicsInReadme(markdown);
     const indexOf0001 = output.indexOf('0001-two-sum');
     const indexOf0021 = output.indexOf('0021-merge-two-sorted-lists');
-    expect(indexOf0001).toBeGreaterThan(-1);
-    expect(indexOf0021).toBeGreaterThan(-1);
-    expect(indexOf0001).toBeLessThan(indexOf0021);
+    assert.ok(indexOf0001 > -1);
+    assert.ok(indexOf0021 > -1);
+    assert.ok(indexOf0001 < indexOf0021);
   });
 
   it('preserves the synced-with-LeetHub line in the preamble instead of dropping it', () => {
@@ -37,7 +39,9 @@ describe('sortTopicsInReadme', () => {
     ].join('\n');
 
     const output = sortTopicsInReadme(markdown);
-    expect(output).toContain('This repository is synced with [LeetHub](https://github.com/any/LeetHub).');
+    assert.ok(
+      output.includes('This repository is synced with [LeetHub](https://github.com/any/LeetHub).')
+    );
   });
 });
 
@@ -55,7 +59,7 @@ describe('appendProblemToReadme', () => {
     );
     const expected =
       '# LeetCode Topics\n### Extra Hard questions\nThese are notes I want for extra hard problems\n\n# About me\nThis a repo I had that I wished to do xyz with\n\n\x3C!---LeetCode Topics Start-->\n# LeetCode Topics\n\n## Hash Table\n| Problem Name | Difficulty |\n| ------- | ------- |\n| [0020-fake-problem](https://github.com/any/tree/main/LeetCode/0020-fake-problem) | Easy |\n| [0013-roman-to-integer](https://github.com/any/tree/main/LeetCode/0013-roman-to-integer) | Medium |\n\n\n\n\x3C!---LeetCode Topics End-->';
-    expect(output).toBe(expected);
+    assert.equal(output, expected);
   });
 
   it('should not append duplicate problem', () => {
@@ -69,6 +73,6 @@ describe('appendProblemToReadme', () => {
       'LeetCode/0013-roman-to-integer',
       'Medium'
     );
-    expect(output).toBe(sampleText);
+    assert.equal(output, sampleText);
   });
 });

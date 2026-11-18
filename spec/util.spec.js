@@ -1,3 +1,5 @@
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
 import {
   archiveAndResetStats,
   buildProblemPath,
@@ -12,39 +14,43 @@ describe('buildProblemPath', () => {
   const language = 'Python3';
 
   it('always prefixes LeetCode/, with no folders on', () => {
-    expect(
+    assert.equal(
       buildProblemPath(problem, difficulty, language, {
         folderDifficulty: false,
         folderLanguage: false,
-      })
-    ).toBe('LeetCode/0001-two-sum');
+      }),
+      'LeetCode/0001-two-sum'
+    );
   });
 
   it('difficulty folder only', () => {
-    expect(
+    assert.equal(
       buildProblemPath(problem, difficulty, language, {
         folderDifficulty: true,
         folderLanguage: false,
-      })
-    ).toBe('LeetCode/Easy/0001-two-sum');
+      }),
+      'LeetCode/Easy/0001-two-sum'
+    );
   });
 
   it('language folder only', () => {
-    expect(
+    assert.equal(
       buildProblemPath(problem, difficulty, language, {
         folderDifficulty: false,
         folderLanguage: true,
-      })
-    ).toBe('LeetCode/Python3/0001-two-sum');
+      }),
+      'LeetCode/Python3/0001-two-sum'
+    );
   });
 
   it('language wins over difficulty when both are on - difficulty nests inside language', () => {
-    expect(
+    assert.equal(
       buildProblemPath(problem, difficulty, language, {
         folderDifficulty: true,
         folderLanguage: true,
-      })
-    ).toBe('LeetCode/Python3/Easy/0001-two-sum');
+      }),
+      'LeetCode/Python3/Easy/0001-two-sum'
+    );
   });
 });
 
@@ -58,13 +64,14 @@ describe('parseCustomCommitMessage', () => {
       difficulty: 'Easy',
       language: 'Python3',
     };
-    expect(parseCustomCommitMessage(template, context)).toBe(
+    assert.equal(
+      parseCustomCommitMessage(template, context),
       '08-22-2026 - 0001-two-sum - Array - Easy - Python3'
     );
   });
 
   it('leaves unknown placeholders as literal text', () => {
-    expect(parseCustomCommitMessage('{unknown} stays', {})).toBe('{unknown} stays');
+    assert.equal(parseCustomCommitMessage('{unknown} stays', {}), '{unknown} stays');
   });
 });
 
@@ -113,10 +120,10 @@ describe('syncStatsFromRepo', () => {
     };
 
     const stats = await syncStatsFromRepo();
-    expect(stats.easy).toBe(5);
-    expect(stats.medium).toBe(10);
-    expect(stats.hard).toBe(2);
-    expect(stats.solved).toBe(17);
+    assert.equal(stats.easy, 5);
+    assert.equal(stats.medium, 10);
+    assert.equal(stats.hard, 2);
+    assert.equal(stats.solved, 17);
   });
 });
 
@@ -165,17 +172,17 @@ describe('computeStatsFromReadmes', () => {
     };
 
     const counts = await computeStatsFromReadmes('owner/repo', 'fake-token');
-    expect(counts.easy).toBe(1);
-    expect(counts.medium).toBe(1);
-    expect(counts.hard).toBe(0);
+    assert.equal(counts.easy, 1);
+    assert.equal(counts.medium, 1);
+    assert.equal(counts.hard, 0);
   });
 
   it('returns all zeros when git tree response is not ok (empty repo)', async () => {
     global.fetch = async () => ({ ok: false });
     const counts = await computeStatsFromReadmes('owner/repo', 'fake-token');
-    expect(counts.easy).toBe(0);
-    expect(counts.medium).toBe(0);
-    expect(counts.hard).toBe(0);
+    assert.equal(counts.easy, 0);
+    assert.equal(counts.medium, 0);
+    assert.equal(counts.hard, 0);
   });
 
   it('counts a problem once when the repo has duplicate READMEs for it under different folder shapes', async () => {
@@ -205,7 +212,7 @@ describe('computeStatsFromReadmes', () => {
     };
 
     const counts = await computeStatsFromReadmes('owner/repo', 'fake-token');
-    expect(counts).toEqual({ easy: 1, medium: 1, hard: 0 });
+    assert.deepEqual(counts, { easy: 1, medium: 1, hard: 0 });
   });
 
   it('does not tally per-problem READMEs parked under Archive/ (post Archive & Reset)', async () => {
@@ -230,7 +237,7 @@ describe('computeStatsFromReadmes', () => {
     };
 
     const counts = await computeStatsFromReadmes('owner/repo', 'fake-token');
-    expect(counts).toEqual({ easy: 1, medium: 0, hard: 0 });
+    assert.deepEqual(counts, { easy: 1, medium: 0, hard: 0 });
   });
 
   it('counts correctly regardless of folder-structure depth (no folders, language-only, language+difficulty)', async () => {
@@ -261,7 +268,7 @@ describe('computeStatsFromReadmes', () => {
     };
 
     const counts = await computeStatsFromReadmes('owner/repo', 'fake-token');
-    expect(counts).toEqual({ easy: 1, medium: 1, hard: 1 });
+    assert.deepEqual(counts, { easy: 1, medium: 1, hard: 1 });
   });
 });
 
@@ -374,26 +381,39 @@ describe('archiveAndResetStats', () => {
     const calls = mockGitApi(goodConfig);
 
     const stats = await archiveAndResetStats();
-    expect(stats.solved).toBe(0);
+    assert.equal(stats.solved, 0);
 
     // tree read, ref read, config.json content read, 2 blob creates (stats.json + README.md),
     // tree-patch, commit, ref update - 8, regardless of the 40 files moved.
-    expect(calls.length).toBe(8);
+    assert.equal(calls.length, 8);
 
     const patch = treePatchOf(calls);
     const paths = patch.map(e => e.path);
     // recognised config.json + .gitignore + the prior Archive/ are left untouched (not in the patch)
-    expect(paths).not.toContain('config.json');
-    expect(paths).not.toContain('.gitignore');
-    expect(paths.some(p => p.startsWith('Archive/01-01-2026/'))).toBe(false);
+    assert.ok(!paths.includes('config.json'));
+    assert.ok(!paths.includes('.gitignore'));
+    assert.equal(
+      paths.some(p => p.startsWith('Archive/01-01-2026/')),
+      false
+    );
     // a problem file is moved (deleted at old path, recreated under Archive/)
-    expect(
-      patch.filter(e => e.path === 'LeetCode/0000-problem/README.md' && e.sha === null).length
-    ).toBe(1);
-    expect(paths.some(p => p.endsWith('/LeetCode/0000-problem/README.md'))).toBe(true);
+    assert.equal(
+      patch.filter(e => e.path === 'LeetCode/0000-problem/README.md' && e.sha === null).length,
+      1
+    );
+    assert.equal(
+      paths.some(p => p.endsWith('/LeetCode/0000-problem/README.md')),
+      true
+    );
     // fresh root files
-    expect(patch.find(e => e.path === 'stats.json' && e.sha === 'new-blob-sha')).toBeDefined();
-    expect(patch.find(e => e.path === 'README.md' && e.sha === 'new-blob-sha')).toBeDefined();
+    assert.notEqual(
+      patch.find(e => e.path === 'stats.json' && e.sha === 'new-blob-sha'),
+      undefined
+    );
+    assert.notEqual(
+      patch.find(e => e.path === 'README.md' && e.sha === 'new-blob-sha'),
+      undefined
+    );
   });
 
   it('archives an unrecognised config.json and writes a fresh default in its place', async () => {
@@ -402,14 +422,17 @@ describe('archiveAndResetStats', () => {
     await archiveAndResetStats();
 
     // one extra blob create (the replacement config.json) vs the keep-config case
-    expect(calls.length).toBe(9);
+    assert.equal(calls.length, 9);
 
     const patch = treePatchOf(calls);
     // old config.json removed from root and moved under Archive/
-    expect(patch.filter(e => e.path === 'config.json' && e.sha === null).length).toBe(1);
-    expect(patch.some(e => e.path.endsWith('/config.json') && e.sha === 'config-sha')).toBe(true);
+    assert.equal(patch.filter(e => e.path === 'config.json' && e.sha === null).length, 1);
+    assert.equal(
+      patch.some(e => e.path.endsWith('/config.json') && e.sha === 'config-sha'),
+      true
+    );
     // fresh default config.json written at the root
-    expect(patch.filter(e => e.path === 'config.json' && e.sha === 'new-blob-sha').length).toBe(1);
+    assert.equal(patch.filter(e => e.path === 'config.json' && e.sha === 'new-blob-sha').length, 1);
   });
 
   it('handles a repo with no config.json at all (no content read, no replacement)', async () => {
@@ -419,10 +442,13 @@ describe('archiveAndResetStats', () => {
 
     // no contents/config.json read (nothing to inspect); still writes a fresh default config.json.
     // tree, ref, 3 blobs (stats + readme + config), tree-patch, commit, ref = 8.
-    expect(calls.some(c => c.url.endsWith('/contents/config.json'))).toBe(false);
-    expect(calls.length).toBe(8);
+    assert.equal(
+      calls.some(c => c.url.endsWith('/contents/config.json')),
+      false
+    );
+    assert.equal(calls.length, 8);
     const patch = treePatchOf(calls);
-    expect(patch.filter(e => e.path === 'config.json').length).toBe(1); // only the fresh default
-    expect(patch.find(e => e.path === 'config.json').sha).toBe('new-blob-sha');
+    assert.equal(patch.filter(e => e.path === 'config.json').length, 1); // only the fresh default
+    assert.equal(patch.find(e => e.path === 'config.json').sha, 'new-blob-sha');
   });
 });

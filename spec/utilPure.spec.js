@@ -1,3 +1,5 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import {
   addLeadingZeros,
   buildProblemPath,
@@ -18,116 +20,118 @@ import {
 
 describe('getDifficulty', () => {
   it('maps lowercase names to PascalCase', () => {
-    expect(getDifficulty('easy')).toBe('Easy');
-    expect(getDifficulty('medium')).toBe('Medium');
-    expect(getDifficulty('hard')).toBe('Hard');
+    assert.equal(getDifficulty('easy'), 'Easy');
+    assert.equal(getDifficulty('medium'), 'Medium');
+    assert.equal(getDifficulty('hard'), 'Hard');
   });
 
   it('is case-insensitive and trims surrounding whitespace', () => {
-    expect(getDifficulty('  EASY ')).toBe('Easy');
-    expect(getDifficulty('HaRd')).toBe('Hard');
+    assert.equal(getDifficulty('  EASY '), 'Easy');
+    assert.equal(getDifficulty('HaRd'), 'Hard');
   });
 
   it('returns Unknown for unrecognized or empty input', () => {
-    expect(getDifficulty('impossible')).toBe('Unknown');
-    expect(getDifficulty('')).toBe('Unknown');
+    assert.equal(getDifficulty('impossible'), 'Unknown');
+    assert.equal(getDifficulty(''), 'Unknown');
   });
 });
 
 describe('convertToSlug', () => {
   it('lowercases and hyphenates spaces', () => {
-    expect(convertToSlug('Two Sum')).toBe('two-sum');
-    expect(convertToSlug('Longest Valid Parentheses')).toBe('longest-valid-parentheses');
+    assert.equal(convertToSlug('Two Sum'), 'two-sum');
+    assert.equal(convertToSlug('Longest Valid Parentheses'), 'longest-valid-parentheses');
   });
 
   it('replaces ampersand with -and-', () => {
-    expect(convertToSlug('Best Time to Buy & Sell Stock')).toBe('best-time-to-buy-and-sell-stock');
+    assert.equal(convertToSlug('Best Time to Buy & Sell Stock'), 'best-time-to-buy-and-sell-stock');
   });
 
   it('strips punctuation and collapses repeated hyphens', () => {
-    expect(convertToSlug('Add Two Numbers!!!')).toBe('add-two-numbers');
-    expect(convertToSlug('Roman  to   Integer')).toBe('roman-to-integer');
+    assert.equal(convertToSlug('Add Two Numbers!!!'), 'add-two-numbers');
+    assert.equal(convertToSlug('Roman  to   Integer'), 'roman-to-integer');
   });
 
   it('folds accented characters to ASCII', () => {
-    expect(convertToSlug('Café Menu')).toBe('cafe-menu');
+    assert.equal(convertToSlug('Café Menu'), 'cafe-menu');
   });
 
   it('trims leading and trailing hyphens', () => {
-    expect(convertToSlug('  spaced out  ')).toBe('spaced-out');
+    assert.equal(convertToSlug('  spaced out  '), 'spaced-out');
   });
 });
 
 describe('addLeadingZeros', () => {
   it('pads the numeric prefix to 4 digits', () => {
-    expect(addLeadingZeros('1-two-sum')).toBe('0001-two-sum');
-    expect(addLeadingZeros('42-trapping-rain-water')).toBe('0042-trapping-rain-water');
-    expect(addLeadingZeros('100-same-tree')).toBe('0100-same-tree');
+    assert.equal(addLeadingZeros('1-two-sum'), '0001-two-sum');
+    assert.equal(addLeadingZeros('42-trapping-rain-water'), '0042-trapping-rain-water');
+    assert.equal(addLeadingZeros('100-same-tree'), '0100-same-tree');
   });
 
   it('leaves a 4-digit prefix unchanged', () => {
-    expect(addLeadingZeros('1000-foo')).toBe('1000-foo');
+    assert.equal(addLeadingZeros('1000-foo'), '1000-foo');
   });
 
   it('leaves a 5-digit prefix unchanged (never truncates)', () => {
-    expect(addLeadingZeros('12345-foo')).toBe('12345-foo');
+    assert.equal(addLeadingZeros('12345-foo'), '12345-foo');
   });
 });
 
 describe('slugFromPath', () => {
   it('returns the last segment of a folder path', () => {
-    expect(slugFromPath('LeetCode/Python3/Easy/0001-two-sum')).toBe('0001-two-sum');
-    expect(slugFromPath('LeetCode/0001-two-sum')).toBe('0001-two-sum');
+    assert.equal(slugFromPath('LeetCode/Python3/Easy/0001-two-sum'), '0001-two-sum');
+    assert.equal(slugFromPath('LeetCode/0001-two-sum'), '0001-two-sum');
   });
 
   it('returns a bare name with no slash unchanged', () => {
-    expect(slugFromPath('README.md')).toBe('README.md');
-    expect(slugFromPath('two-sum')).toBe('two-sum');
+    assert.equal(slugFromPath('README.md'), 'README.md');
+    assert.equal(slugFromPath('two-sum'), 'two-sum');
   });
 
   it('ignores a trailing slash', () => {
-    expect(slugFromPath('LeetCode/Easy/0042-foo/')).toBe('0042-foo');
+    assert.equal(slugFromPath('LeetCode/Easy/0042-foo/'), '0042-foo');
   });
 
   it('normalises an unpadded numeric prefix so it keys stats.shas under one identity', () => {
-    expect(slugFromPath('LeetCode/Easy/1-two-sum')).toBe('0001-two-sum');
-    expect(slugFromPath('12-integer-to-roman')).toBe('0012-integer-to-roman');
-    expect(slugFromPath('LeetCode/1-two-sum/1-two-sum.py')).toBe('0001-two-sum');
+    assert.equal(slugFromPath('LeetCode/Easy/1-two-sum'), '0001-two-sum');
+    assert.equal(slugFromPath('12-integer-to-roman'), '0012-integer-to-roman');
+    assert.equal(slugFromPath('LeetCode/1-two-sum/1-two-sum.py'), '0001-two-sum');
   });
 });
 
 describe('problemSlugOfPath', () => {
   it('extracts the slug at any folder depth', () => {
-    expect(problemSlugOfPath('LeetCode/Python3/Easy/0001-two-sum/README.md')).toBe('0001-two-sum');
-    expect(problemSlugOfPath('LeetCode/Easy/0001-two-sum/0001-two-sum.py')).toBe('0001-two-sum');
-    expect(problemSlugOfPath('LeetCode/0001-two-sum/NOTES.md')).toBe('0001-two-sum');
+    assert.equal(problemSlugOfPath('LeetCode/Python3/Easy/0001-two-sum/README.md'), '0001-two-sum');
+    assert.equal(problemSlugOfPath('LeetCode/Easy/0001-two-sum/0001-two-sum.py'), '0001-two-sum');
+    assert.equal(problemSlugOfPath('LeetCode/0001-two-sum/NOTES.md'), '0001-two-sum');
   });
 
   it('extracts the slug from a bare repo-root file with no folder (old-fork layout)', () => {
-    expect(problemSlugOfPath('0007-reverse-integer.py')).toBe('0007-reverse-integer');
-    expect(problemSlugOfPath('0007-reverse-integer/README.md')).toBe('0007-reverse-integer');
+    assert.equal(problemSlugOfPath('0007-reverse-integer.py'), '0007-reverse-integer');
+    assert.equal(problemSlugOfPath('0007-reverse-integer/README.md'), '0007-reverse-integer');
   });
 
   it('normalises an unpadded numeric prefix to the padded identity', () => {
-    expect(problemSlugOfPath('LeetCode/Easy/1-two-sum/README.md')).toBe('0001-two-sum');
-    expect(problemSlugOfPath('12-integer-to-roman/12-integer-to-roman.java')).toBe(
+    assert.equal(problemSlugOfPath('LeetCode/Easy/1-two-sum/README.md'), '0001-two-sum');
+    assert.equal(
+      problemSlugOfPath('12-integer-to-roman/12-integer-to-roman.java'),
       '0012-integer-to-roman'
     );
   });
 
   it('returns null for non-problem paths', () => {
-    expect(problemSlugOfPath('README.md')).toBeNull();
-    expect(problemSlugOfPath('config.json')).toBeNull();
-    expect(problemSlugOfPath('stats.json')).toBeNull();
-    expect(problemSlugOfPath('LeetCode/Easy')).toBeNull();
-    expect(problemSlugOfPath('Archive/09-01-2026/README.md')).toBeNull();
+    assert.equal(problemSlugOfPath('README.md'), null);
+    assert.equal(problemSlugOfPath('config.json'), null);
+    assert.equal(problemSlugOfPath('stats.json'), null);
+    assert.equal(problemSlugOfPath('LeetCode/Easy'), null);
+    assert.equal(problemSlugOfPath('Archive/09-01-2026/README.md'), null);
   });
 
   it('returns null for a problem file parked under Archive/ (out of play after Archive & Reset)', () => {
-    expect(
-      problemSlugOfPath('Archive/09-01-2026/LeetCode/Easy/0001-two-sum/README.md')
-    ).toBeNull();
-    expect(problemSlugOfPath('Archive/09-01-2026/0001-two-sum.py')).toBeNull();
+    assert.equal(
+      problemSlugOfPath('Archive/09-01-2026/LeetCode/Easy/0001-two-sum/README.md'),
+      null
+    );
+    assert.equal(problemSlugOfPath('Archive/09-01-2026/0001-two-sum.py'), null);
   });
 });
 
@@ -137,7 +141,8 @@ describe('problemDirInTree', () => {
       { type: 'blob', path: 'LeetCode/Python3/Easy/0002-add-two-numbers/README.md' },
       { type: 'blob', path: 'LeetCode/Python3/Easy/0002-add-two-numbers/0002-add-two-numbers.py' },
     ];
-    expect(problemDirInTree(tree, '0002-add-two-numbers')).toBe(
+    assert.equal(
+      problemDirInTree(tree, '0002-add-two-numbers'),
       'LeetCode/Python3/Easy/0002-add-two-numbers'
     );
   });
@@ -147,17 +152,17 @@ describe('problemDirInTree', () => {
       { type: 'blob', path: 'LeetCode/0001-two-sum/README.md' },
       { type: 'blob', path: 'LeetCode/Easy/0001-two-sum/README.md' },
     ];
-    expect(problemDirInTree(tree, '0001-two-sum')).toBe('LeetCode/0001-two-sum');
+    assert.equal(problemDirInTree(tree, '0001-two-sum'), 'LeetCode/0001-two-sum');
   });
 
   it("returns '' for a pre-fork bare file at the repo root", () => {
     const tree = [{ type: 'blob', path: '0007-reverse-integer.py' }];
-    expect(problemDirInTree(tree, '0007-reverse-integer')).toBe('');
+    assert.equal(problemDirInTree(tree, '0007-reverse-integer'), '');
   });
 
   it('normalises an unpadded prefix so 1-two-sum and 0001-two-sum are one identity', () => {
     const tree = [{ type: 'blob', path: 'LeetCode/Easy/1-two-sum/README.md' }];
-    expect(problemDirInTree(tree, '0001-two-sum')).toBe('LeetCode/Easy/1-two-sum');
+    assert.equal(problemDirInTree(tree, '0001-two-sum'), 'LeetCode/Easy/1-two-sum');
   });
 
   it('ignores tree (directory) items and returns null when the slug is absent', () => {
@@ -166,7 +171,7 @@ describe('problemDirInTree', () => {
       { type: 'blob', path: 'README.md' },
       { type: 'blob', path: 'config.json' },
     ];
-    expect(problemDirInTree(tree, '0001-two-sum')).toBeNull();
+    assert.equal(problemDirInTree(tree, '0001-two-sum'), null);
   });
 
   it('does not match a copy parked under Archive/ - a re-solve after Archive & Reset is new', () => {
@@ -174,7 +179,7 @@ describe('problemDirInTree', () => {
       { type: 'blob', path: 'Archive/09-01-2026/LeetCode/Easy/0001-two-sum/README.md' },
       { type: 'blob', path: 'Archive/09-01-2026/LeetCode/Easy/0001-two-sum/0001-two-sum.py' },
     ];
-    expect(problemDirInTree(tree, '0001-two-sum')).toBeNull();
+    assert.equal(problemDirInTree(tree, '0001-two-sum'), null);
   });
 
   it('picks the live copy when an archived copy of the same slug also exists', () => {
@@ -182,36 +187,38 @@ describe('problemDirInTree', () => {
       { type: 'blob', path: 'Archive/09-01-2026/LeetCode/0001-two-sum/README.md' },
       { type: 'blob', path: 'LeetCode/Easy/0001-two-sum/README.md' },
     ];
-    expect(problemDirInTree(tree, '0001-two-sum')).toBe('LeetCode/Easy/0001-two-sum');
+    assert.equal(problemDirInTree(tree, '0001-two-sum'), 'LeetCode/Easy/0001-two-sum');
   });
 });
 
 describe('buildProblemPath (language name preserved verbatim)', () => {
   it('keeps symbol-bearing language names like C++ intact in the path', () => {
-    expect(
+    assert.equal(
       buildProblemPath('0001-two-sum', 'Easy', 'C++', {
         folderDifficulty: false,
         folderLanguage: true,
-      })
-    ).toBe('LeetCode/C++/0001-two-sum');
+      }),
+      'LeetCode/C++/0001-two-sum'
+    );
   });
 });
 
 describe('parseCustomCommitMessage (edge cases)', () => {
   it('substitutes adjacent and repeated placeholders', () => {
-    expect(parseCustomCommitMessage('{a}{b} {a}', { a: 'x', b: 'y' })).toBe('xy x');
+    assert.equal(parseCustomCommitMessage('{a}{b} {a}', { a: 'x', b: 'y' }), 'xy x');
   });
 
   it('stringifies an explicitly undefined value rather than blanking it', () => {
-    expect(parseCustomCommitMessage('d={d}', { d: undefined })).toBe('d=undefined');
+    assert.equal(parseCustomCommitMessage('d={d}', { d: undefined }), 'd=undefined');
   });
 
   it('leaves a template with no placeholders untouched', () => {
-    expect(parseCustomCommitMessage('plain message', { a: '1' })).toBe('plain message');
+    assert.equal(parseCustomCommitMessage('plain message', { a: '1' }), 'plain message');
   });
 
   it('leaves an unknown placeholder as literal text', () => {
-    expect(parseCustomCommitMessage('{date} {mystery}', { date: '08-27-2026' })).toBe(
+    assert.equal(
+      parseCustomCommitMessage('{date} {mystery}', { date: '08-27-2026' }),
       '08-27-2026 {mystery}'
     );
   });
@@ -219,7 +226,8 @@ describe('parseCustomCommitMessage (edge cases)', () => {
 
 describe('formatStats', () => {
   it('formats runtime/memory with percent signs and the LeetHub suffix', () => {
-    expect(formatStats('52 ms', '88', '17.2 MB', '63')).toBe(
+    assert.equal(
+      formatStats('52 ms', '88', '17.2 MB', '63'),
       'Time: 52 ms (88%), Space: 17.2 MB (63%) - LeetHub'
     );
   });
@@ -227,7 +235,7 @@ describe('formatStats', () => {
 
 describe('githubHeaders', () => {
   it('returns the token auth header and the v3 Accept header', () => {
-    expect(githubHeaders('abc123')).toEqual({
+    assert.deepEqual(githubHeaders('abc123'), {
       Authorization: 'token abc123',
       Accept: 'application/vnd.github.v3+json',
     });
@@ -236,56 +244,57 @@ describe('githubHeaders', () => {
 
 describe('escapeHtml', () => {
   it('escapes all five HTML-significant characters', () => {
-    expect(escapeHtml(`<a href="x" title='y'>&</a>`)).toBe(
+    assert.equal(
+      escapeHtml(`<a href="x" title='y'>&</a>`),
       '&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;'
     );
   });
 
   it('escapes ampersand before the entities it introduces (no double-escaping)', () => {
-    expect(escapeHtml('a & b < c')).toBe('a &amp; b &lt; c');
+    assert.equal(escapeHtml('a & b < c'), 'a &amp; b &lt; c');
   });
 
   it('coerces non-string input to string', () => {
-    expect(escapeHtml(null)).toBe('null');
-    expect(escapeHtml(42)).toBe('42');
+    assert.equal(escapeHtml(null), 'null');
+    assert.equal(escapeHtml(42), '42');
   });
 });
 
 describe('isEmptyObject', () => {
   it('is true for a plain empty object and a null-prototype object', () => {
-    expect(isEmptyObject({})).toBe(true);
-    expect(isEmptyObject(Object.create(null))).toBe(true);
+    assert.equal(isEmptyObject({}), true);
+    assert.equal(isEmptyObject(Object.create(null)), true);
   });
 
   it('is false when own enumerable properties exist', () => {
-    expect(isEmptyObject({ a: 1 })).toBe(false);
+    assert.equal(isEmptyObject({ a: 1 }), false);
   });
 });
 
 describe('checkElem', () => {
   it('is true only for an array-like with length > 0', () => {
-    expect(checkElem({ length: 3 })).toBe(true);
-    expect(checkElem(['a'])).toBe(true);
+    assert.equal(checkElem({ length: 3 }), true);
+    assert.equal(checkElem(['a']), true);
   });
 
   it('is false for empty, null, or undefined', () => {
-    expect(checkElem({ length: 0 })).toBe(false);
-    expect(checkElem([])).toBe(false);
-    expect(checkElem(null)).toBe(false);
-    expect(checkElem(undefined)).toBe(false);
+    assert.equal(checkElem({ length: 0 }), false);
+    assert.equal(checkElem([]), false);
+    assert.equal(checkElem(null), false);
+    assert.equal(checkElem(undefined), false);
   });
 });
 
 describe('date helpers', () => {
   it('getTodaysDate returns MM-DD-YYYY', () => {
-    expect(getTodaysDate()).toMatch(/^\d{2}-\d{2}-\d{4}$/);
+    assert.match(getTodaysDate(), /^\d{2}-\d{2}-\d{4}$/);
   });
 
   it('getTimestamp returns MM-DD-YYYY-hh-mm-ss', () => {
-    expect(getTimestamp()).toMatch(/^\d{2}-\d{2}-\d{4}-\d{2}-\d{2}-\d{2}$/);
+    assert.match(getTimestamp(), /^\d{2}-\d{2}-\d{4}-\d{2}-\d{2}-\d{2}$/);
   });
 
   it('getTimestamp starts with getTodaysDate', () => {
-    expect(getTimestamp().startsWith(getTodaysDate())).toBe(true);
+    assert.equal(getTimestamp().startsWith(getTodaysDate()), true);
   });
 });

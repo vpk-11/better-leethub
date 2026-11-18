@@ -1,3 +1,5 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import { appendProblemToReadme } from '../scripts/leetcode/readmeTopics.js';
 
 const START = '\x3C!---LeetCode Topics Start-->';
@@ -15,14 +17,16 @@ describe('appendProblemToReadme (section/table creation branches)', () => {
       'Easy'
     );
 
-    expect(output).toContain(START);
-    expect(output).toContain(END);
-    expect(output).toContain('## Array');
-    expect(output).toContain(
-      '| [0001-two-sum](https://github.com/me/tree/main/LeetCode/0001-two-sum) | Easy |'
+    assert.ok(output.includes(START));
+    assert.ok(output.includes(END));
+    assert.ok(output.includes('## Array'));
+    assert.ok(
+      output.includes(
+        '| [0001-two-sum](https://github.com/me/tree/main/LeetCode/0001-two-sum) | Easy |'
+      )
     );
     // Original content is preserved ahead of the generated section.
-    expect(output.indexOf('# My Solutions')).toBeLessThan(output.indexOf(START));
+    assert.ok(output.indexOf('# My Solutions') < output.indexOf(START));
   });
 
   it('adds a new topic table when the topic is not yet present in the section', () => {
@@ -47,14 +51,18 @@ describe('appendProblemToReadme (section/table creation branches)', () => {
       'Easy'
     );
 
-    expect(output).toContain('## Array');
-    expect(output).toContain('## Hash Table');
-    expect(output).toContain(
-      '| [0242-valid-anagram](https://github.com/me/tree/main/LeetCode/0242-valid-anagram) | Easy |'
+    assert.ok(output.includes('## Array'));
+    assert.ok(output.includes('## Hash Table'));
+    assert.ok(
+      output.includes(
+        '| [0242-valid-anagram](https://github.com/me/tree/main/LeetCode/0242-valid-anagram) | Easy |'
+      )
     );
     // Existing Array row untouched.
-    expect(output).toContain(
-      '| [0001-two-sum](https://github.com/me/tree/main/LeetCode/0001-two-sum) | Easy |'
+    assert.ok(
+      output.includes(
+        '| [0001-two-sum](https://github.com/me/tree/main/LeetCode/0001-two-sum) | Easy |'
+      )
     );
   });
 
@@ -80,7 +88,7 @@ describe('appendProblemToReadme (section/table creation branches)', () => {
       'Easy'
     );
 
-    expect(output).toBe(input);
+    assert.equal(output, input);
   });
 
   it('uses problemPath (not the bare slug) for the link URL', () => {
@@ -94,8 +102,10 @@ describe('appendProblemToReadme (section/table creation branches)', () => {
       'Easy'
     );
 
-    expect(output).toContain(
-      '[0001-two-sum](https://github.com/me/tree/main/LeetCode/Python3/Easy/0001-two-sum)'
+    assert.ok(
+      output.includes(
+        '[0001-two-sum](https://github.com/me/tree/main/LeetCode/Python3/Easy/0001-two-sum)'
+      )
     );
   });
 });
